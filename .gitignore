@@ -1,0 +1,125 @@
+```gitignore
+# =========================
+# Dependencies
+# =========================
+**/node_modules/
+**/.pnp
+**/.pnp.js
+
+# Package Managers
+**/.npm/
+**/.pnpm-store/
+**/.yarn/
+**/.yarn/cache/
+**/.yarn/unplugged/
+**/.yarn/build-state.yml
+**/.yarn/install-state.gz
+
+# =========================
+# Environment Variables
+# =========================
+**/.env
+**/.env.*
+!**/.env.example
+
+# =========================
+# Build Output
+# =========================
+**/dist/
+**/build/
+**/.next/
+**/out/
+**/.turbo/
+**/.cache/
+**/.parcel-cache/
+**/.vite/
+**/coverage/
+
+# TypeScript
+**/*.tsbuildinfo
+
+# =========================
+# Logs
+# =========================
+**/*.log
+**/logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# =========================
+# Runtime Files
+# =========================
+**/tmp/
+**/temp/
+**/.tmp/
+**/pids/
+**/*.pid
+**/*.seed
+**/*.pid.lock
+
+# =========================
+# IDEs & Editors
+# =========================
+.vscode/
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.swp
+*.swo
+*.orig
+
+# =========================
+# Operating System Files
+# =========================
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# =========================
+# Testing
+# =========================
+**/.nyc_output/
+
+# =========================
+# Cache
+# =========================
+**/.eslintcache
+**/.stylelintcache
+
+# =========================
+# Misc
+# =========================
+**/*.tgz
+**/.vercel/
+**/.netlify/
+**/.serverless/
+
+# =========================
+# Local LLM / AI
+# =========================
+**/ollama/
+**/qdrant_storage/
+**/chroma/
+**/weaviate/
+**/faiss_index/
+
+# SQLite Databases
+**/*.sqlite
+**/*.sqlite3
+**/*.db
+
+# Python (if any AI utilities exist)
+**/__pycache__/
+**/*.pyc
+
+# =========================
+# Secrets
+# =========================
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+```
