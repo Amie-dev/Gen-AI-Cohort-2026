@@ -527,6 +527,37 @@ console.log(new TextDecoder().decode(decoded));
 
 ---
 
+## How Tokenization Works: Byte-Pair Encoding (BPE)
+
+Tokenization algorithms aren't arbitrary rules. Modern LLMs (like GPT and Llama) use an algorithm called **Byte-Pair Encoding (BPE)** to construct their vocabulary and split text.
+
+### The BPE Algorithm Steps:
+1. **Initialize the Vocabulary**: Treat every unique character/byte in the training corpus as a base token.
+2. **Count Co-occurrences**: Count all adjacent pairs of tokens in the corpus.
+3. **Merge the Most Frequent Pair**: Find the most frequent adjacent pair of tokens (e.g., `'t'` and `'h'`) and merge them into a single new token (e.g., `'th'`).
+4. **Repeat**: Repeat steps 2 and 3 iteratively until the target vocabulary size is reached (e.g., 50,000 or 100,000 tokens).
+
+Through this recursive merging, BPE naturally keeps common words as single tokens (e.g., `the`, `and`) while splitting rare words or new terminology into sub-word chunks (e.g., `tokenization` -> `token` + `ization`).
+
+---
+
+## Tokenizer Model Comparisons
+
+Not all tokenizers are built equal. As LLMs have evolved, their tokenization strategies and vocabulary sizes have drastically changed to become more efficient:
+
+| Tokenizer Name | Primarily Used By | Vocabulary Size | Characteristics & Key Improvements |
+| :--- | :--- | :--- | :--- |
+| **`gpt2`** | GPT-2 | ~50,257 | Early BPE implementation. Very basic split rules. |
+| **`cl100k_base`** | GPT-3.5-Turbo, GPT-4 | ~100,000 | Larger vocabulary. Highly optimized for handling source code, whitespace, and special characters. |
+| **`o200k_base`** | GPT-4o, GPT-4o-mini | ~200,000 | Massive vocabulary. Significantly reduces the "token tax" for non-English languages, and handles numbers/dates better. |
+
+### The Multilingual "Token Tax"
+In older tokenizers (like `gpt2` or `cl100k_base`), non-English characters (e.g., Spanish accents, Hindi script, Bengali script) often split into multiple tokens—sometimes 3 or 4 tokens for a single character! This increases costs and reduces the effective context window size for non-English prompts.
+
+Modern tokenizers like `o200k_base` resolve this by expanding the vocabulary to include common character combinations of non-Latin alphabets, leading to a much lower token count for the exact same text.
+
+---
+
 # Step 2 — Embeddings
 
 After tokenization, token IDs are transformed into **embeddings**.
@@ -767,6 +798,60 @@ client.chat.completions
 3. Specify the model to use.
 4. Provide the conversation as an array of messages.
 5. Receive and print the generated response.
+
+---
+
+## Managing API Keys Safely
+
+Never hardcode your API keys inside your code files. Hardcoded secrets are easily leaked when publishing or committing code to Git.
+
+### Modern Node.js Native `.env` Loading
+Starting in **Node.js v20.6.0**, Node has native support for reading `.env` files without installing a third-party package like `dotenv`.
+
+1. Create a file named `.env` in the root of your project:
+   ```env
+   OPENAI_API_KEY=your-actual-api-key-here
+   ```
+2. Run your application with the `--env-file` flag:
+   ```bash
+   node --env-file=.env index.js
+   ```
+3. Inside your JavaScript files, the environment variables will be available on `process.env`:
+   ```javascript
+   console.log(process.env.OPENAI_API_KEY);
+   ```
+
+---
+
+# Beyond OpenAI: Groq, Gemini, and Mistral
+
+While OpenAI is the industry leader, the AI ecosystem has several other powerful platforms. As an Application Engineer, you should choose the model that fits your latency, cost, and context window requirements.
+
+## 1. Google Gemini
+* **Strength**: Gemini models are famous for their **massive context windows** (up to 2 million tokens in Gemini 1.5/2.0) and strong **native multimodality** (it was built from the ground up to understand text, images, audio, and video concurrently).
+* **SDK**: `@google/genai` (Google's modern SDK)
+* **Key Model**: `gemini-2.5-flash` or `gemini-1.5-flash`
+
+## 2. Groq
+* **Strength**: Groq does not use traditional GPUs. Instead, it uses custom **LPU (Language Processing Unit)** hardware, achieving blazing fast inference speeds (often >500 tokens/sec for Llama 3 models). It is ideal for real-time applications requiring instant responses.
+* **SDK**: `groq-sdk`
+* **Key Model**: `llama3-8b-8192` or `llama-3.3-70b-versatile`
+
+## 3. Mistral AI
+* **Strength**: A leading European AI company championing **open-weights** models. They offer competitive commercial APIs and also allow developers to download and host the models locally.
+* **SDK**: `@mistralai/mistralai`
+* **Key Model**: `mistral-large-latest` or `open-mistral-7b`
+
+---
+
+## Developer Comparison Table
+
+| Feature | OpenAI | Google Gemini | Groq | Mistral AI |
+| :--- | :--- | :--- | :--- | :--- |
+| **Official NPM Package** | `openai` | `@google/genai` | `groq-sdk` | `@mistralai/mistralai` |
+| **Env Variable Key** | `OPENAI_API_KEY` | `GEMINI_API_KEY` | `GROQ_API_KEY` | `MISTRAL_API_KEY` |
+| **Default Client Import** | `import { OpenAI } from "openai"` | `import { GoogleGenAI } from "@google/genai"` | `import Groq from "groq-sdk"` | `import { Mistral } from "@mistralai/mistralai"` |
+| **Primary Model Used** | `gpt-4o-mini` | `gemini-2.5-flash` | `llama-3.3-70b-versatile` | `mistral-large-latest` |
 
 ---
 
