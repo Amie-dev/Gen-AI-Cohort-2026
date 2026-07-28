@@ -1,89 +1,96 @@
-# Mistral AI API & Node.js SDK Guide
+# Mistral AI API & Node.js SDK Deep Dive
 
-Mistral AI is a Paris-based AI company famous for developing highly efficient open-weights LLMs that rival proprietary models in reasoning, multilingual understanding, and code generation.
-
----
-
-## 🌟 Key Strengths of Mistral AI
-
-1. **Open-Weights Leader**:
-   * Mistral releases many model weights (e.g., Mistral 7B, Mixtral 8x7B, Mistral Nemo) to the public, allowing organizations to self-host, customize, and run them locally.
-2. **European Data Governance**:
-   * As a European company, Mistral offers strict adherence to European data safety standards and compliance (critical for GDPR-sensitive enterprise applications).
-3. **Multilingual Excellence**:
-   * Mistral models are specifically optimized for multilingual tasks out of the box, speaking French, German, Spanish, Italian, and English fluently.
+Mistral AI provides efficient commercial and open-weights models. Its Node.js SDK (`@mistralai/mistralai`) supports the standard chat completion pattern but features some unique naming specifications.
 
 ---
 
-## 📦 Setup & Dependency
-Mistral uses the official `@mistralai/mistralai` SDK package.
+## 🏗️ 1. Client Instantiation
 
-```bash
-npm install @mistralai/mistralai
-```
-
----
-
-## 🗝️ API Key Configuration
-Define the key in `.env`:
-```env
-MISTRAL_API_KEY=your_mistral_console_api_key
-```
-
-Run your code using Node's native env flag:
-```bash
-node --env-file=.env mistral_chat.js
-```
-
----
-
-## 💻 Code Example
+To use Mistral AI, import `Mistral` and initialize it with your API key.
 
 ```javascript
 import { Mistral } from "@mistralai/mistralai";
 
-// Initialize the Mistral client
-// It automatically retrieves MISTRAL_API_KEY from process.env if left empty
-const client = new Mistral({ apiKey: process.env.MISTRAL_API_KEY });
-
-async function run() {
-  const response = await client.chat.complete({
-    model: "mistral-large-latest", // Mistral's flagship commercial model
-    messages: [
-      {
-        role: "system",
-        content: "You are a concise, helpful assistant."
-      },
-      {
-        role: "user",
-        content: "Explain the philosophy of open-weights models."
-      }
-    ],
-    temperature: 0.7,
-    maxTokens: 150
-  });
-
-  console.log("Response:", response.choices[0].message.content);
-  
-  // Extracting Usage Details
-  if (response.usage) {
-    console.log(`Prompt Tokens: ${response.usage.promptTokens}`);
-    console.log(`Response Tokens: ${response.usage.completionTokens}`);
-    console.log(`Total Tokens: ${response.usage.totalTokens}`);
-  }
-}
-
-run();
+const client = new Mistral({
+  apiKey: process.env.MISTRAL_API_KEY, // Configured via environment variable
+});
 ```
 
 ---
 
-## 🛠️ Key SDK Reference Options
+## 🛠️ 2. Request Configuration: `client.chat.complete`
 
-* **`model`**: Supported models on Mistral Console include:
-  * `mistral-large-latest` ( flagship commercial model, rivals GPT-4)
-  * `mistral-small-latest` (Cost-effective fast reasoning model)
-  * `open-mistral-7b` / `open-mixtral-8x22b` (Standard open-weights models)
-* **`messages`**: Standard chat completion format array.
-* **`temperature`**: Controls randomness (range 0.0 to 1.0).
-* **`maxTokens`**: Restricts the maximum output token length (note: CamelCase `maxTokens` in the official Mistral SDK).
+Note that the method name in the Mistral SDK is **`chat.complete`** (not `chat.completions.create`). Furthermore, parameters like max tokens use camelCase (**`maxTokens`**):
+
+```javascript
+const response = await client.chat.complete({
+  model: "mistral-large-latest", // Primary flagship reasoning model
+  messages: [
+    { role: "system", content: "You are an expert coder." },
+    { role: "user", content: "Explain big-O notation." }
+  ],
+  temperature: 0.7,        // Randomness (0.0 to 1.0)
+  maxTokens: 150,          // Maximum generated tokens (uses camelCase)
+  safePrompt: true,        // Enables Mistral's built-in safety moderation filter
+});
+```
+
+---
+
+## 📦 3. Raw Response Object Structure (JSON)
+
+When Mistral's API processes the completion, it returns a JSON response object. Here is its detailed shape under the hood:
+
+```json
+{
+  "id": "mst-987a654b-321c-4321-b123-abcdef123456",
+  "object": "chat.completion",
+  "created": 1719598600,
+  "model": "mistral-large-latest",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "Big-O notation is a mathematical notation that describes the limiting behavior of a function when the argument tends towards a particular value or infinity. In computer science, it is used to classify algorithms according to how their run time or space requirements grow as the input size grows."
+      },
+      "finishReason": "stop"
+    }
+  ],
+  "usage": {
+    "promptTokens": 24,
+    "completionTokens": 56,
+    "totalTokens": 80
+  }
+}
+```
+
+---
+
+## 🔍 4. Parsing the Response in JavaScript
+
+Extract data from Mistral's response payload using properties that mirror the API structure. Note the camelCase properties for `finishReason` and token counts inside `usage`:
+
+### Accessing the Text Response
+The text resides inside the choice's message content.
+```javascript
+const outputText = response.choices[0].message.content;
+console.log("Mistral Answer:", outputText);
+```
+
+### Accessing the Finish Reason
+Find the termination code via `finishReason` (camelCase):
+```javascript
+const stopReason = response.choices[0].finishReason;
+console.log("Finish Reason:", stopReason); // "stop" or "length"
+```
+
+### Accessing Token counts
+In Mistral's usage metadata, the token counts use camelCase keys:
+```javascript
+if (response.usage) {
+  console.log("Input Tokens count:", response.usage.promptTokens);
+  console.log("Output Tokens count:", response.usage.completionTokens);
+  console.log("Total Tokens count:", response.usage.totalTokens);
+}
+```
