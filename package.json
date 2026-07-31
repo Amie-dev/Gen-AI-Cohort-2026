@@ -1,0 +1,29 @@
+{
+  "name": "gen-ai-cohort",
+  "version": "1.0.0",
+  "description": "Welcome to the **Gen AI JS Cohort 2026**, powered by **Chaicode**!",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Amie-dev/Gen-AI-Cohort-2026.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "@google/genai": "^0.13.0",
+    "@mistralai/mistralai": "^1.0.0",
+    "axios": "^1.19.0",
+    "groq-sdk": "^0.5.0",
+    "openai": "^4.52.7",
+    "tiktoken": "^1.0.22"
+  },
+  "bugs": {
+    "url": "https://github.com/Amie-dev/Gen-AI-Cohort-2026/issues"
+  },
+  "homepage": "https://github.com/Amie-dev/Gen-AI-Cohort-2026#readme"
+}
