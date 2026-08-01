@@ -4,9 +4,19 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>GenAI Multi-Agent Workbench</title>
+  
+  <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+  
+  <!-- Marked (Markdown Parser) -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  
+  <!-- Highlight.js (Syntax Highlighting) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/tokyo-night-dark.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+
   <style>
     :root {
       --bg-dark: #090a0f;
@@ -292,13 +302,14 @@
       border-radius: 16px;
       backdrop-filter: blur(16px);
       padding: 1.5rem;
+      margin-bottom: 1.5rem;
     }
 
     .consensus-card-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 1rem;
+      margin-bottom: 1.2rem;
       border-bottom: 1px solid rgba(139, 92, 246, 0.2);
       padding-bottom: 0.75rem;
     }
@@ -314,8 +325,7 @@
 
     .consensus-content {
       font-size: 0.95rem;
-      line-height: 1.6;
-      white-space: pre-wrap;
+      line-height: 1.7;
       color: #e5e7eb;
     }
 
@@ -400,19 +410,79 @@
     .status-error .status-dot { background-color: var(--rose-accent); }
     .status-error { color: var(--rose-accent); }
 
+    /* Output and Markdown styling */
     .output-box {
       flex-grow: 1;
-      height: 250px;
+      height: 350px;
       background: rgba(0, 0, 0, 0.35);
       border: 1px solid rgba(255, 255, 255, 0.04);
       border-radius: 10px;
-      padding: 0.85rem;
-      font-size: 0.85rem;
-      line-height: 1.5;
+      padding: 1rem;
+      font-size: 0.9rem;
+      line-height: 1.6;
       overflow-y: auto;
-      white-space: pre-wrap;
-      font-family: 'Fira Code', monospace;
       color: #d1d5db;
+    }
+
+    /* Markdown elements styling inside panels */
+    .output-box p, .consensus-content p {
+      margin-bottom: 0.75rem;
+    }
+    
+    .output-box p:last-child, .consensus-content p:last-child {
+      margin-bottom: 0;
+    }
+
+    .output-box ul, .output-box ol, .consensus-content ul, .consensus-content ol {
+      margin-left: 1.25rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .output-box li, .consensus-content li {
+      margin-bottom: 0.25rem;
+    }
+
+    .output-box h1, .output-box h2, .output-box h3, .output-box h4,
+    .consensus-content h1, .consensus-content h2, .consensus-content h3, .consensus-content h4 {
+      font-family: 'Outfit', sans-serif;
+      color: #e5e7eb;
+      margin-top: 1rem;
+      margin-bottom: 0.5rem;
+      font-size: 1.1rem;
+      font-weight: 600;
+    }
+
+    .output-box pre, .consensus-content pre {
+      background: rgba(0, 0, 0, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 8px;
+      padding: 0.8rem;
+      margin: 0.75rem 0;
+      overflow-x: auto;
+    }
+
+    .output-box code, .consensus-content code {
+      font-family: 'Fira Code', monospace;
+      font-size: 0.82rem;
+      background: rgba(255, 255, 255, 0.06);
+      padding: 0.15rem 0.3rem;
+      border-radius: 4px;
+      color: #f43f5e; /* Sleek pinkish accent for inline code tags */
+    }
+
+    .output-box pre code, .consensus-content pre code {
+      background: transparent;
+      padding: 0;
+      border-radius: 0;
+      color: inherit;
+    }
+
+    .output-box blockquote, .consensus-content blockquote {
+      border-left: 3px solid var(--violet-primary);
+      padding-left: 0.75rem;
+      color: var(--text-muted);
+      font-style: italic;
+      margin: 0.75rem 0;
     }
 
     .error-display {
@@ -631,6 +701,12 @@
   </div>
 
   <script>
+    // Configure marked to break lines on single enters (standard chat feel)
+    marked.setOptions({
+      breaks: true,
+      gfm: true
+    });
+
     // Configuration Drawer Toggle
     const btnConfig = document.getElementById('btn-config');
     const configDrawer = document.getElementById('config-drawer');
@@ -644,11 +720,19 @@
     const btnStream = document.getElementById('btn-stream');
     const btnConsensus = document.getElementById('btn-consensus');
     const consensusSection = document.getElementById('consensus-section');
-    const consensusOutput = document.getElementById('consensus-output');
     const appStatus = document.getElementById('app-status');
 
     const providers = ['openai', 'gemini', 'groq', 'mistral'];
     const refs = {};
+
+    // Tracks raw text accumulation for Markdown parsing
+    let rawTexts = {
+      openai: '',
+      gemini: '',
+      groq: '',
+      mistral: '',
+      consensus: ''
+    };
 
     // Initialize DOM references
     providers.forEach(p => {
@@ -683,12 +767,15 @@
     }
 
     function resetPanels() {
+      // Clear buffers
       providers.forEach(p => {
+        rawTexts[p] = '';
         refs[p].output.innerText = '';
         refs[p].error.style.display = 'none';
         refs[p].error.innerText = '';
         setStatus(refs[p], 'idle', 'Idle');
       });
+      rawTexts.consensus = '';
       consensusRefs.output.innerText = 'Synthesis will appear here...';
       consensusRefs.error.style.display = 'none';
       consensusRefs.error.innerText = '';
@@ -750,16 +837,23 @@
           if (type === 'status') {
             consensusRefs.status.className = 'panel-status status-streaming';
             consensusRefs.status.querySelector('span').innerText = 'Synthesizing...';
-            consensusRefs.output.innerText = data.text;
+            consensusRefs.output.innerHTML = `<p style="font-style: italic; color: var(--text-muted);">${data.text}</p>`;
           } else if (type === 'chunk') {
-            if (consensusRefs.output.innerText === 'Models are generating responses...' || 
-                consensusRefs.output.innerText === 'Synthesizing final consensus answer...') {
+            if (rawTexts.consensus === '') {
               consensusRefs.output.innerText = '';
             }
-            consensusRefs.output.innerText += data.text;
+            rawTexts.consensus += data.text;
+            consensusRefs.output.innerHTML = marked.parse(rawTexts.consensus);
+            
+            // Highlight code blocks
+            consensusRefs.output.querySelectorAll('pre code').forEach((block) => {
+              hljs.highlightElement(block);
+            });
           } else if (type === 'error') {
             consensusRefs.status.className = 'panel-status status-error';
             consensusRefs.status.querySelector('span').innerText = 'Failed';
+            
+            // Appends errors to display logs
             consensusRefs.error.innerText = data.error;
             consensusRefs.error.style.display = 'block';
           } else if (type === 'done') {
@@ -776,7 +870,14 @@
           if (ref.status.querySelector('span').innerText === 'Connecting...') {
             setStatus(ref, 'streaming', 'Streaming');
           }
-          ref.output.innerText += data.text;
+          rawTexts[provider] += data.text;
+          ref.output.innerHTML = marked.parse(rawTexts[provider]);
+
+          // Highlight code blocks dynamically
+          ref.output.querySelectorAll('pre code').forEach((block) => {
+            hljs.highlightElement(block);
+          });
+
           // Auto-scroll output box
           ref.output.scrollTop = ref.output.scrollHeight;
         } else if (type === 'error') {
