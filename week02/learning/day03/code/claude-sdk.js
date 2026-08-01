@@ -1,4 +1,3 @@
-import 'dotenv/config';
 import Anthropic from '@anthropic-ai/sdk';
 
 // Verify that the Anthropic API key is available

@@ -1,4 +1,3 @@
-import 'dotenv/config';
 import { GoogleGenAI } from '@google/genai';
 
 // Verify that the Gemini API key is available

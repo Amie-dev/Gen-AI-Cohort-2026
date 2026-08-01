@@ -6,25 +6,25 @@ Welcome to the study notes for **Week 02 — Day 03** of the **Gen AI JS Cohort*
 
 ## 📚 Study Modules
 
-1. **[AI Agent Architecture](file:///home/aminul/development/gen-ai-cohort/week02/learning/day03/notes/01-ai-agent-architecture.md)**
+1. **[AI Agent Architecture](./01-ai-agent-architecture.md)**
    - What is an AI Agent? (LLM vs Agent)
    - Why LLMs alone are not enough for production (Harnesses & Orchestrations)
    - Instructions and System Prompts
    - Tool calling and Guardrails (Input & Output)
    - Human in the Loop (HITL)
 
-2. **[Context and Token Management](file:///home/aminul/development/gen-ai-cohort/week02/learning/day03/notes/02-context-and-token-management.md)**
+2. **[Context and Token Management](./02-context-and-token-management.md)**
    - Understanding the Context Window
    - Large context problems (latency, cost, reasoning loss)
    - Context window management (Summarization, Sliding Windows, RAG)
    - Token charge structures and Inference vs Training
 
-3. **[Accessing LLMs: APIs, SDKs, and Local Models](file:///home/aminul/development/gen-ai-cohort/week02/learning/day03/notes/03-accessing-llms-sdk-vs-api.md)**
+3. **[Accessing LLMs: APIs, SDKs, and Local Models](./03-accessing-llms-sdk-vs-api.md)**
    - REST API vs SDK vs Agent SDK comparison
    - Popular SDKs (OpenAI, Claude, Gemini, Mistral, Groq)
    - Offline development with Local Models (Ollama setup and models)
 
-4. **[Structured Output & Function Calling](file:///home/aminul/development/gen-ai-cohort/week02/learning/day03/notes/04-structured-output-and-function-calling.md)**
+4. **[Structured Output & Function Calling](./04-structured-output-and-function-calling.md)**
    - Extracting structured data from models
    - Schema validation using Zod
    - Function calling (Tool use loop)
@@ -45,9 +45,9 @@ Welcome to the study notes for **Week 02 — Day 03** of the **Gen AI JS Cohort*
 
 ## 📝 Practical Assignments
 
-We built implementations for today's assignments in the **[assigenment/](file:///home/aminul/development/gen-ai-cohort/week02/learning/day03/assigenment/)** folder:
+We built implementations for today's assignments in the **[assigenment/](../assigenment/)** folder:
 
-1. **[Assignment 1: Multi-Provider AI Streaming](file:///home/aminul/development/gen-ai-cohort/week02/learning/day03/assigenment/server.js)**: Stream responses from OpenAI, Gemini, Groq, and Mistral side-by-side in real-time.
-2. **[Assignment 2: AI Consensus System](file:///home/aminul/development/gen-ai-cohort/week02/learning/day03/assigenment/server.js)**: Synthesize responses from four providers into a single, high-quality consolidated consensus answer.
+1. **[Assignment 1: Multi-Provider AI Streaming](../assigenment/server.js)**: Stream responses from OpenAI, Gemini, Groq, and Mistral side-by-side in real-time.
+2. **[Assignment 2: AI Consensus System](../assigenment/server.js)**: Synthesize responses from four providers into a single, high-quality consolidated consensus answer.
 
 These can be run in the browser using the interactive Web Dashboard or directly from the terminal via the CLI script.
