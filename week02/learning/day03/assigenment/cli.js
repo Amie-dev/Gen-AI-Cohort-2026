@@ -65,11 +65,11 @@ async function streamGemini(prompt) {
     return '';
   }
 
-  console.log('\n--- Google Gemini (gemini-2.0-flash) ---');
+  console.log('\n--- Google Gemini (gemini-2.0-flash-lite) ---');
   try {
     const ai = new GoogleGenAI({ apiKey: key });
     const stream = await ai.models.generateContentStream({
-      model: 'gemini-2.0-flash',
+      model: 'gemini-2.0-flash-lite',
       contents: prompt,
     });
 

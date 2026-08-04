@@ -80,7 +80,7 @@ async function streamGemini(
   try {
     const ai = new GoogleGenAI({ apiKey: key });
     const stream = await ai.models.generateContentStream({
-      model: modelName || "gemini-2.0-flash-light",
+      model: modelName || "gemini-2.0-flash-lite",
       contents: prompt,
     });
 
@@ -182,7 +182,7 @@ function getConsensusSynthesizer(queryKeys) {
     ? process.env.GEMINI_API_KEY
     : queryKeys.geminiKey;
   if (!isPlaceholder(geminiKey)) {
-    return { provider: "gemini", key: geminiKey, model: "gemini-2.0-flash" };
+    return { provider: "gemini", key: geminiKey, model: "gemini-2.0-flash-lite" };
   }
 
   const openaiKey = isPlaceholder(queryKeys.openaiKey)
@@ -403,7 +403,7 @@ const server = http.createServer(async (req, res) => {
         synthesisCandidates.push({
           provider: "gemini",
           key: geminiKey,
-          model: models.geminiModel || "gemini-2.0-flash",
+          model: models.geminiModel || "gemini-2.0-flash-lite",
           run: streamGemini,
         });
       }

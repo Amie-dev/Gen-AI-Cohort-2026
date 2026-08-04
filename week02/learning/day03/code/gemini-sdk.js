@@ -15,9 +15,9 @@ async function main() {
   console.log('🤖 Streaming Response:\n');
 
   try {
-    // Generate streamed content using gemini-2.0-flash
+    // Generate streamed content using gemini-2.0-flash-lite
     const responseStream = await ai.models.generateContentStream({
-      model: 'gemini-2.0-flash',
+      model: 'gemini-2.0-flash-lite',
       contents: prompt,
     });
 
