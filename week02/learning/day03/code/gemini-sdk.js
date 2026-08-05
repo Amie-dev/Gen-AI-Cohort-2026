@@ -15,16 +15,16 @@ async function main() {
   console.log('🤖 Streaming Response:\n');
 
   try {
-    // Generate streamed content using gemini-2.0-flash-lite
+    // Generate streamed content using gemini-3.1-flash-lite
     const responseStream = await ai.models.generateContentStream({
-      model: 'gemini-2.0-flash-lite',
+      model: 'gemini-3.1-flash-lite',
       contents: prompt,
     });
 
     // Loop through the stream chunks and write to standard output in real-time
     for await (const chunk of responseStream) {
       if (chunk.text) {
-        process.stdout.write(chunk.text());
+        process.stdout.write(chunk.text);
       }
     }
     console.log('\n\nStream finished successfully.');
