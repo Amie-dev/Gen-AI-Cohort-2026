@@ -153,9 +153,9 @@ async function main(prompt = '') {
   }
 }
 
-main(
-  'What is weather of Patiala, Delhi, Goa and then write the output this on a beautifuyll webpage. create a new folder saying weather and create all HTML CSS file there and then run this on my browser',
-);
+// main(
+//   'What is weather of Patiala, Delhi, Goa and then write the output this on a beautifuyll webpage. create a new folder saying weather and create all HTML CSS file there and then run this on my browser',
+// );
 
 // main(
 //   'What is meaning of life? I am asking this because I need to wite this in an HTML file for my web dev project do not give me output as HTML as I can do this own my own just give me content in elboaratibve way for this',
