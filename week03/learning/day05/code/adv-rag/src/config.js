@@ -1,0 +1,31 @@
+import "dotenv/config";
+
+export const config = {
+  port: Number(process.env.PORT) || 8000,
+  redis: {
+    host: process.env.REDIS_HOST || "127.0.0.1",
+    port: Number(process.env.REDIS_PORT) || 6379,
+  },
+  qdrant: {
+    url: process.env.QDRANT_URL || "http://127.0.0.1:6333",
+    collection: process.env.QDRANT_COLLECTION || "adv_rag_documents",
+  },
+  openai: {
+    apiKey: process.env.OPENAI_API_KEY,
+    embeddingModel: process.env.EMBEDDING_MODEL || "text-embedding-3-small",
+    embeddingDimensions: Number(process.env.EMBEDDING_DIMENSIONS) || 1536,
+    chatModel: process.env.CHAT_MODEL || "gpt-4o-mini",
+  },
+  chunking: {
+    chunkSize: Number(process.env.CHUNK_SIZE) || 1000,
+    chunkOverlap: Number(process.env.CHUNK_OVERLAP) || 200,
+  },
+  retrieval: {
+    topK: Number(process.env.RETRIEVAL_TOP_K) || 5,
+    rrfK: Number(process.env.RRF_K) || 60,
+    finalK: Number(process.env.RETRIEVAL_FINAL_K) || 5,
+  },
+};
+
+export const INDEXING_QUEUE = "adv-rag-indexing";
+export const QUERY_QUEUE = "adv-rag-query";
