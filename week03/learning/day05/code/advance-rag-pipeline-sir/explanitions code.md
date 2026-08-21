@@ -1,6 +1,6 @@
 # 🚀 Advanced RAG Pipeline: Comprehensive Step-by-Step Code Explanation
 
-This document provides a detailed, step-by-step technical explanation of the **Advanced Retrieval-Augmented Generation (RAG) Pipeline** in [`week03/learning/day05/code/advance-rag-pipeline/`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/advance-rag-pipeline/).
+This document provides a detailed, step-by-step technical explanation of the **Advanced Retrieval-Augmented Generation (RAG) Pipeline** in [`week03/learning/day05/code/advance-rag-pipeline-sir/`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/advance-rag-pipeline-sir/).
 
 ---
 
@@ -15,7 +15,7 @@ This codebase implements a **Production-Grade Asynchronous Advanced RAG System**
    - **Step-Back Prompting**: Generates a higher-level, broader question to retrieve general background context.
    - **Sub-Query Decomposition**: Decomposes complex queries into 3 focused sub-questions.
    - **HyDE (Hypothetical Document Embeddings)**: Generates a hypothetical reference passage answering the query to improve vector domain similarity matching.
-3. **Reciprocal Rank Fusion (RRF)**: Merges ranked retrieval lists from all query variants using the formula $RRF(d) = \sum \frac{1}{k + r(d)}$ to surface the most relevant chunks.
+3. **Reciprocal Rank Fusion (RRF)**: Merges ranked retrieval lists from all query variants using the formula \(RRF(d) = \sum \frac{1}{k + r(d)}\) to surface the most relevant chunks.
 4. **Asynchronous Polling Query Architecture**: Clients submit queries to `/query`, receive a `jobId`, and poll `/query/:id` for completed RAG responses grounded strictly in the retrieved documents.
 
 ---
@@ -24,25 +24,25 @@ This codebase implements a **Production-Grade Asynchronous Advanced RAG System**
 
 ```mermaid
 graph TD
-    Client([HTTP Client / Frontend]) -->|POST /index - PDF Upload| Express[Express API Server index.js]
+    Client(["HTTP Client / Frontend"]) -->|POST /index - PDF Upload| Express["Express API Server index.js"]
     Client -->|POST /query - Submit Question| Express
     Client -->|GET /query/:id - Poll Status| Express
 
-    Express -->|Enqueue Indexing Job| RedisQueue[(BullMQ Redis Queues)]
+    Express -->|Enqueue Indexing Job| RedisQueue[("BullMQ Redis Queues")]
     Express -->|Enqueue Query Job| RedisQueue
 
-    RedisQueue -->|Consume index-file| Worker[Worker Process worker.js]
+    RedisQueue -->|Consume index-file| Worker["Worker Process worker.js"]
     RedisQueue -->|Consume run-query| Worker
 
-    Worker -->|1. Parse & Chunk PDF| Indexer[Indexer Module indexer.js]
-    Indexer -->|2. Generate Embeddings| OpenAI[OpenAI API text-embedding-3-small]
-    Indexer -->|3. Upsert Vectors| Qdrant[(Qdrant Vector DB)]
+    Worker -->|1. Parse & Chunk PDF| Indexer["Indexer Module indexer.js"]
+    Indexer -->|2. Generate Embeddings| OpenAI["OpenAI API text-embedding-3-small"]
+    Indexer -->|3. Upsert Vectors| Qdrant[("Qdrant Vector DB")]
 
-    Worker -->|1. Query Rewriting / HyDE| Retriever[Retriever Module retriever.js]
+    Worker -->|1. Query Rewriting / HyDE| Retriever["Retriever Module retriever.js"]
     Retriever -->|2. Search Vectors| Qdrant
-    Retriever -->|3. Reciprocal Rank Fusion| RRF[RRF Aggregator]
-    RRF -->|4. Grounded Chat Generation| OpenAI Chat[OpenAI gpt-4o-mini]
-    OpenAI Chat -->|Return Answer + Sources| Worker
+    Retriever -->|3. Reciprocal Rank Fusion| RRF["RRF Aggregator"]
+    RRF -->|4. Grounded Chat Generation| OpenAIChat["OpenAI gpt-4o-mini"]
+    OpenAIChat -->|Return Answer + Sources| Worker
 ```
 
 ---
@@ -50,7 +50,7 @@ graph TD
 ## 📁 File Structure
 
 ```text
-week03/learning/day05/code/advance-rag-pipeline/
+week03/learning/day05/code/advance-rag-pipeline-sir/
 ├── docker-compose.yml     # Infrastructure setup (Qdrant & Redis containers)
 ├── package.json           # Dependencies and run scripts
 ├── explanitions code.md   # Step-by-step code explanation document
@@ -73,7 +73,7 @@ week03/learning/day05/code/advance-rag-pipeline/
 
 ### Step 1: Central Configuration (`src/config.js`)
 
-[`src/config.js`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/advance-rag-pipeline/src/config.js) loads `.env` variables and establishes application constants.
+[`src/config.js`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/advance-rag-pipeline-sir/src/config.js) loads `.env` variables and establishes application constants.
 
 ```javascript
 import "dotenv/config";
@@ -113,7 +113,7 @@ export const QUERY_QUEUE = "query";
 
 ### Step 2: Vector Database Initialization (`src/qdrant.js`)
 
-[`src/qdrant.js`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/advance-rag-pipeline/src/qdrant.js) connects to Qdrant REST service and verifies collection setup:
+[`src/qdrant.js`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/advance-rag-pipeline-sir/src/qdrant.js) connects to Qdrant REST service and verifies collection setup:
 
 ```javascript
 import { QdrantClient } from "@qdrant/js-client-rest";
@@ -149,7 +149,7 @@ export async function ensureCollection() {
 
 ### Step 3: OpenAI Client & Vector Embeddings (`src/openai.js`)
 
-[`src/openai.js`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/advance-rag-pipeline/src/openai.js) provides unified helper functions for vector embeddings:
+[`src/openai.js`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/advance-rag-pipeline-sir/src/openai.js) provides unified helper functions for vector embeddings:
 
 ```javascript
 import OpenAI from "openai";
@@ -185,7 +185,7 @@ export async function embedTexts(texts, batchSize = 100) {
 
 ### Step 4: Asynchronous BullMQ Job Queues (`src/queue.js`)
 
-[`src/queue.js`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/advance-rag-pipeline/src/queue.js) defines Redis connection parameters and BullMQ queues for indexing and querying.
+[`src/queue.js`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/advance-rag-pipeline-sir/src/queue.js) defines Redis connection parameters and BullMQ queues for indexing and querying.
 
 ```javascript
 import { Queue } from "bullmq";
@@ -223,7 +223,7 @@ export async function enqueueQueryJob(payload) {
 
 ### Step 5: Document Indexing Pipeline (`src/indexer.js`)
 
-[`src/indexer.js`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/advance-rag-pipeline/src/indexer.js) processes uploaded PDFs step-by-step:
+[`src/indexer.js`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/advance-rag-pipeline-sir/src/indexer.js) processes uploaded PDFs step-by-step:
 
 1. **PDF Text Extraction**: Uses `pdf-parse` to convert binary PDF buffers into plain text strings.
 2. **Word-Boundary Aware Chunking**: Splits text into chunks of `chunkSize=1000` with `overlap=200`, ensuring words are not cut in half:
@@ -287,7 +287,7 @@ export async function indexPdf({ filePath, originalName }) {
 
 ### Step 6: Advanced Retrieval & Query Engine (`src/retriever.js`)
 
-[`src/retriever.js`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/advance-rag-pipeline/src/retriever.js) contains the advanced retrieval techniques that elevate this RAG implementation above basic vector search.
+[`src/retriever.js`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/advance-rag-pipeline-sir/src/retriever.js) contains the advanced retrieval techniques that elevate this RAG implementation above basic vector search.
 
 #### A. Structured Query Rewriting & Expansion (`queryRewriting`)
 Uses OpenAI's **Strict JSON Schema** output to generate:
@@ -395,8 +395,29 @@ Constructs context blocks with chunk references and forces the LLM to answer **O
 
 ```javascript
 export async function answerQuery(query) {
-  const hits = await qdrant.search(config.qdrant.collection, { vector, limit: config.retrieval.topK, with_payload: true });
-  
+  const collection = config.qdrant.collection;
+  const vector = await embedText(query);
+  const hits = await qdrant.search(collection, {
+    vector,
+    limit: config.retrieval.topK,
+    with_payload: true,
+  });
+
+  const sources = hits.map((h) => ({
+    text: h.payload?.text ?? "",
+    source: h.payload?.source ?? null,
+    chunkIndex: h.payload?.chunkIndex ?? null,
+    score: h.score,
+  }));
+
+  if (sources.length === 0) {
+    return {
+      query,
+      answer: "I couldn't find anything relevant in the indexed documents.",
+      sources: [],
+    };
+  }
+
   const context = sources
     .map((s, i) => `[Chunk ${i + 1}] (source: ${s.source})\n${s.text}`)
     .join("\n\n");
@@ -421,7 +442,7 @@ export async function answerQuery(query) {
 
 ### Step 7: Worker Processor (`src/worker.js`)
 
-[`src/worker.js`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/advance-rag-pipeline/src/worker.js) runs in a separate process to consume BullMQ jobs asynchronously:
+[`src/worker.js`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/advance-rag-pipeline-sir/src/worker.js) runs in a separate process to consume BullMQ jobs asynchronously:
 
 - **Indexing Worker** (`concurrency: 2`): Parses PDF ➡️ Chunks text ➡️ Embeds vectors ➡️ Upserts into Qdrant.
 - **Query Worker** (`concurrency: 4`): Embeds query ➡️ Searches Qdrant ➡️ Runs RAG pipeline.
@@ -446,7 +467,7 @@ const queryWorker = new Worker(QUERY_QUEUE, async (job) => {
 
 ### Step 8: Express REST API Server (`src/index.js`)
 
-[`src/index.js`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/advance-rag-pipeline/src/index.js) provides HTTP REST endpoints:
+[`src/index.js`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/advance-rag-pipeline-sir/src/index.js) provides HTTP REST endpoints:
 
 - **`POST /index`**: Accepts PDF file via Multer (`upload.single("file")`), saves it to disk, enqueues an indexing job to BullMQ, and returns HTTP 202 (`Accepted`) with `jobId`.
 - **`POST /query`**: Enqueues a user query into BullMQ and returns HTTP 202 (`Accepted`) with `jobId` and `poll` URL.
