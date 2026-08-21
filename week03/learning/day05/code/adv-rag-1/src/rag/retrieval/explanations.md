@@ -5,6 +5,14 @@ Retrieval in production Advanced RAG is a multi-stage process. Merging results a
 
 ---
 
+## 🧭 Recommended Reading Order & Learning Path
+
+- ⬅️ **Previous Step (Step 5.4)**: Storage Adapters — [`src/rag/adapters/explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/rag/adapters/explanations.md)
+- 📍 **Current Step (Step 5.5 / RAG Stages 9–11)**: Multi-Stage Retrieval & Reciprocal Rank Fusion — [`src/rag/retrieval/explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/rag/retrieval/explanations.md)
+- ➡️ **Next Step (Step 5.6 / RAG Stages 12–13)**: Context Construction & Grounded Generation — [`src/rag/generation/explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/rag/generation/explanations.md)
+
+---
+
 ## Multi-Stage Retrieval Pipeline
 
 ```

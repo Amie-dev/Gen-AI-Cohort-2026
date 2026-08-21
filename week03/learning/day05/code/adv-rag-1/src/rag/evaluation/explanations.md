@@ -7,6 +7,14 @@ Even after pre-retrieval query translation and multi-stage re-ranking, synthesiz
 
 ---
 
+## 🧭 Recommended Reading Order & Learning Path
+
+- ⬅️ **Previous Step (Step 5.6 / RAG Stages 12–13)**: Context Construction & Grounded Generation — [`src/rag/generation/explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/rag/generation/explanations.md)
+- 📍 **Current Step (Step 5.7 / RAG Stage 14)**: Corrective RAG (CRAG) Evaluation — [`src/rag/evaluation/explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/rag/evaluation/explanations.md)
+- 🏁 **Final Step (RAG Stage 15)**: Output Security & PII Unmasking — [`src/rag/guardrails/explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/rag/guardrails/explanations.md#4-output-guardrails-coordinator-outputjs)
+
+---
+
 ## The 4 CRAG Evaluation Dimensions
 
 ```

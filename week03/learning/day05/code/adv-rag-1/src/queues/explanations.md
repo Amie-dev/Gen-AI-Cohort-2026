@@ -7,6 +7,14 @@ In production RAG systems, document ingestion (parsing PDFs, extracting raw text
 
 ---
 
+## 🧭 Recommended Reading Order & Learning Path
+
+- ⬅️ **Previous Step (Step 3A)**: Database Connectors & Clients — [`src/db/explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/db/explanations.md)
+- 📍 **Current Step (Step 3B)**: Async Ingestion & Background Queues — [`src/queues/explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/queues/explanations.md)
+- ➡️ **Next Step (Step 4)**: Core RAG Master Orchestrator — [`src/rag/explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/rag/explanations.md)
+
+---
+
 ## Queue Architecture & Workflow
 
 ```

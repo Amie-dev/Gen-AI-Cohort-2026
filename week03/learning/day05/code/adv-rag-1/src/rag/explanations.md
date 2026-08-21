@@ -5,6 +5,21 @@ The `src/rag/` directory is the core orchestration hub of the Advanced RAG syste
 
 ---
 
+## 🧭 Recommended Reading Order & Learning Path
+
+- ⬅️ **Previous Step (Step 3)**: Data Storage & Queues — [`src/db/explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/db/explanations.md) & [`src/queues/explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/queues/explanations.md)
+- 📍 **Current Step (Step 4)**: Master RAG Pipeline Orchestrator (`ragPipeline.js`) — [`src/rag/explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/rag/explanations.md)
+- ➡️ **Next Step (Step 5 Sub-Modules)**:
+  1. **Stages 1 & 15 (Security)**: [`src/rag/guardrails/explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/rag/guardrails/explanations.md)
+  2. **Stages 2–5 (Translation)**: [`src/rag/query/explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/rag/query/explanations.md)
+  3. **Stages 6–8 (Routing)**: [`src/rag/routing/explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/rag/routing/explanations.md)
+  4. **Database Adapters**: [`src/rag/adapters/explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/rag/adapters/explanations.md)
+  5. **Stages 9–11 (Retrieval & Fusion)**: [`src/rag/retrieval/explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/rag/retrieval/explanations.md)
+  6. **Stages 12–13 (Generation)**: [`src/rag/generation/explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/rag/generation/explanations.md)
+  7. **Stage 14 (Evaluation & CRAG)**: [`src/rag/evaluation/explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/rag/evaluation/explanations.md)
+
+---
+
 ## Sub-Domain Architectural Breakdown
 
 ```

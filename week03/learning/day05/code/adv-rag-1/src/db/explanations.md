@@ -5,6 +5,15 @@ The `src/db/` directory isolates all data storage connection drivers and client 
 
 ---
 
+## 🧭 Recommended Reading Order & Learning Path
+
+- ⬅️ **Previous Step (Step 2)**: HTTP Server API & Endpoints — [`src/explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/explanations.md)
+- 📍 **Current Step (Step 3A)**: Database Connectors & Clients — [`src/db/explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/db/explanations.md)
+- ➡️ **Next Step (Step 3B)**: Async Ingestion & Background Queues — [`src/queues/explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/queues/explanations.md)
+- ➡️ **Master Pipeline (Step 4)**: Core RAG Pipeline Orchestrator — [`src/rag/explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/rag/explanations.md)
+
+---
+
 ## Infrastructure Component Breakdown
 
 | File | Data Store Type | Role in Advanced RAG | Key Functions |

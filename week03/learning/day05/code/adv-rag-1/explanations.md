@@ -5,6 +5,27 @@
 
 ---
 
+## 🧭 Recommended Reading Order & Learning Path
+
+Welcome! This is **Step 1** of your learning journey into Advanced Production RAG. To easily understand how all components, data flows, and sub-systems fit together, follow this reading sequence:
+
+1. 📍 **Step 1 (You Are Here)**: Root System Overview & Architecture — [`explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/explanations.md)
+2. ➡️ **Step 2 (Next)**: HTTP Server API & Endpoint Orchestration — [`src/explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/explanations.md)
+3. ➡️ **Step 3**: Database Connections & Async Queues:
+   - Database Connectors (Postgres, Qdrant, Redis): [`src/db/explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/db/explanations.md)
+   - Background Indexing Queue (BullMQ Worker): [`src/queues/explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/queues/explanations.md)
+4. ➡️ **Step 4**: Core RAG Master Orchestrator Pipeline — [`src/rag/explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/rag/explanations.md)
+5. ➡️ **Step 5**: Deep-Dive RAG Sub-Modules (Stages 1–15):
+   - **Security (Stages 1 & 15)**: [`src/rag/guardrails/explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/rag/guardrails/explanations.md)
+   - **Query Translation (Stages 2–5)**: [`src/rag/query/explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/rag/query/explanations.md)
+   - **Query Intent Router (Stages 6–8)**: [`src/rag/routing/explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/rag/routing/explanations.md)
+   - **Database Storage Adapters**: [`src/rag/adapters/explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/rag/adapters/explanations.md)
+   - **Retrieval & Fusion (Stages 9–11)**: [`src/rag/retrieval/explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/rag/retrieval/explanations.md)
+   - **Grounded Generation (Stages 12–13)**: [`src/rag/generation/explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/rag/generation/explanations.md)
+   - **CRAG Evaluation (Stage 14)**: [`src/rag/evaluation/explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/rag/evaluation/explanations.md)
+
+---
+
 ## Architecture Diagram & Flow
 
 ```

@@ -4,6 +4,27 @@ A modular, production-grade Advanced RAG implementation built in Node.js, adheri
 
 ---
 
+## 🧭 Where to Start & Learning Roadmap
+
+If you are new to this repository, follow this step-by-step reading order to easily understand the entire codebase:
+
+1. **Step 1 (Start Here)**: High-Level Architecture & 15-Stage Master Pseudocode — [`explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/explanations.md)
+2. **Step 2**: Server Entry Point & HTTP Endpoints (`server.js`) — [`src/explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/explanations.md)
+3. **Step 3**: Data Access & Background Processing:
+   - Database Connectors (Postgres, Qdrant, Redis): [`src/db/explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/db/explanations.md)
+   - BullMQ Async Background Worker & Indexing: [`src/queues/explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/queues/explanations.md)
+4. **Step 4**: Core RAG Pipeline Orchestrator (`ragPipeline.js`) — [`src/rag/explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/rag/explanations.md)
+5. **Step 5**: Detailed RAG Stage Sub-Modules:
+   - **Stages 1 & 15 (Security)**: [`src/rag/guardrails/explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/rag/guardrails/explanations.md) (Input/Output PII masking & jailbreak detection)
+   - **Stages 2–5 (Translation)**: [`src/rag/query/explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/rag/query/explanations.md) (Query Rewrite, Step-Back, HyDE, Sub-Queries)
+   - **Stages 6–8 (Routing)**: [`src/rag/routing/explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/rag/routing/explanations.md) (Intent routing to SQL/Qdrant/S3)
+   - **Database Adapters**: [`src/rag/adapters/explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/rag/adapters/explanations.md) (Unified storage interface)
+   - **Stages 9–11 (Retrieval)**: [`src/rag/retrieval/explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/rag/retrieval/explanations.md) (Filtering, RRF fusion, Cross-Encoder reranker)
+   - **Stages 12–13 (Generation)**: [`src/rag/generation/explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/rag/generation/explanations.md) (Context construction & grounded answer synthesis)
+   - **Stage 14 (Evaluation)**: [`src/rag/evaluation/explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/rag/evaluation/explanations.md) (Corrective RAG - CRAG groundedness check & retry loop)
+
+---
+
 ## 🌟 Key Architecture & Capabilities
 
 1. **Input Guardrails (`src/rag/guardrails/`)**: PII detection & masking, prompt injection/jailbreak filtering, policy validation.

@@ -7,6 +7,14 @@ Providing unformatted or raw document dumps to an LLM leads to confusion, source
 
 ---
 
+## 🧭 Recommended Reading Order & Learning Path
+
+- ⬅️ **Previous Step (Step 5.5 / RAG Stages 9–11)**: Multi-Stage Retrieval & Fusion — [`src/rag/retrieval/explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/rag/retrieval/explanations.md)
+- 📍 **Current Step (Step 5.6 / RAG Stages 12–13)**: Context Building & Grounded Synthesis — [`src/rag/generation/explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/rag/generation/explanations.md)
+- ➡️ **Next Step (Step 5.7 / RAG Stage 14)**: Corrective RAG (CRAG) Evaluation — [`src/rag/evaluation/explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/rag/evaluation/explanations.md)
+
+---
+
 ## Generation Modules Breakdown
 
 | File | Primary Responsibility | Input Payload | Output Format |

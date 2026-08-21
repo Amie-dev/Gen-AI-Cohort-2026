@@ -7,6 +7,14 @@ Without guardrails, RAG systems are exposed to prompt injection attacks, PII dat
 
 ---
 
+## 🧭 Recommended Reading Order & Learning Path
+
+- ⬅️ **Previous Step (Step 4)**: RAG Master Orchestrator — [`src/rag/explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/rag/explanations.md)
+- 📍 **Current Step (Step 5.1 / RAG Stage 1 & 15)**: Guardrails (PII Masking & Jailbreak Check) — [`src/rag/guardrails/explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/rag/guardrails/explanations.md)
+- ➡️ **Next Step (Step 5.2 / RAG Stages 2–5)**: Pre-Retrieval Query Translation — [`src/rag/query/explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/rag/query/explanations.md)
+
+---
+
 ## Security Lifecycle & Sub-Module Matrix
 
 ```

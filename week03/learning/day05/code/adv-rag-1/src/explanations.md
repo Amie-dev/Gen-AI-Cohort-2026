@@ -5,6 +5,17 @@ The `src/` directory is the core application root containing all backend HTTP se
 
 ---
 
+## 🧭 Recommended Reading Order & Learning Path
+
+- ⬅️ **Previous Step (Step 1)**: System Overview & Architecture — [`explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/explanations.md)
+- 📍 **Current Step (Step 2)**: HTTP Server API & Endpoints — [`src/explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/explanations.md)
+- ➡️ **Next Steps**:
+  - **Step 3A (Data Access)**: Database Drivers & Clients — [`src/db/explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/db/explanations.md)
+  - **Step 3B (Async Queues)**: BullMQ Background Indexing — [`src/queues/explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/queues/explanations.md)
+  - **Step 4 (Master Pipeline)**: Main RAG Orchestrator (`ragPipeline.js`) — [`src/rag/explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/rag/explanations.md)
+
+---
+
 ## Folder Architecture & Responsibilities
 
 | Sub-Module / File | Architectural Layer | Primary Responsibility |

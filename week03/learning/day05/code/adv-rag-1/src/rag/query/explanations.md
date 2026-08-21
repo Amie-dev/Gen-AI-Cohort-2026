@@ -7,6 +7,14 @@ By translating a single user query into **4 complementary query representations*
 
 ---
 
+## 🧭 Recommended Reading Order & Learning Path
+
+- ⬅️ **Previous Step (Step 5.1 / RAG Stage 1 & 15)**: Guardrails (PII & Security) — [`src/rag/guardrails/explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/rag/guardrails/explanations.md)
+- 📍 **Current Step (Step 5.2 / RAG Stages 2–5)**: Pre-Retrieval Query Translation (Rewrite, Step-Back, HyDE, Sub-Queries) — [`src/rag/query/explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/rag/query/explanations.md)
+- ➡️ **Next Step (Step 5.3 / RAG Stages 6–8)**: Dynamic Multi-Store Query Routing — [`src/rag/routing/explanations.md`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/rag/routing/explanations.md)
+
+---
+
 ## Pre-Retrieval Translation Techniques Matrix
 
 | Strategy | Target Problem | Operational Mechanism | Output Format |
