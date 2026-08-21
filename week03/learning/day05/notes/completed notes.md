@@ -2674,3 +2674,554 @@ BullMQ / RabbitMQ + Workers
 And the most important production lesson:
 
 > **Don't blindly add every RAG technique. Design the retrieval and generation pipeline around your actual use case, data, latency budget, security requirements, and evaluation results.**
+
+
+
+# 73. Complete Production Advanced RAG
+
+```mermaid
+flowchart TD
+
+    %% =========================================================
+    %%                    INDEXING PIPELINE
+    %% =========================================================
+
+    subgraph INDEXING["📚 INDEXING / KNOWLEDGE INGESTION"]
+
+        DS[📄 Data Sources]
+
+        DS --> INGEST[Document Ingestion]
+
+        INGEST --> PARSE[Document Parsing]
+
+        PARSE --> CLEAN[Cleaning / Normalization]
+
+        CLEAN --> CHUNK[Chunking]
+
+        CHUNK --> META[Metadata Enrichment]
+
+        META --> ACL[Access Control / Tenant Metadata]
+
+        ACL --> EMBED[Embedding Model]
+
+        EMBED --> VECTOR[Vector Embeddings]
+
+        CHUNK --> STORE[Document / Chunk Storage]
+
+        META --> STORE
+
+        VECTOR --> VDB[(Qdrant / Vector Database)]
+
+        STORE --> S3[(Object Storage / S3)]
+
+        STORE --> SQLDB[(PostgreSQL)]
+
+    end
+
+
+    %% =========================================================
+    %%                    USER / QUERY FLOW
+    %% =========================================================
+
+    U[👤 User]
+
+    U --> API[API Gateway]
+
+    API --> IG[Input Guardrails]
+
+    IG --> PII[PII Detection / Masking]
+
+    PII --> JB[Jailbreak / Prompt Injection Check]
+
+    JB --> AUTH[Authentication / Authorization]
+
+    AUTH --> QR[Query Router]
+
+    QR --> CACHE{Cache?}
+
+    CACHE -->|Hit| OUT[Output Guardrails]
+
+    CACHE -->|Miss| QT[Query Translation]
+
+
+    %% =========================================================
+    %%                    QUERY TRANSLATION
+    %% =========================================================
+
+    subgraph TRANSLATION["🔄 QUERY TRANSLATION"]
+
+        QT --> RW[Query Rewrite]
+
+        QT --> SB[Step-Back Query]
+
+        QT --> HYDE[HyDE]
+
+        QT --> SQ[Sub-Query Decomposition]
+
+        QT --> QEMB[Query Embedding]
+
+    end
+
+
+    %% =========================================================
+    %%                    ROUTING
+    %% =========================================================
+
+    RW --> ROUTE[Retrieval Router]
+
+    SB --> ROUTE
+
+    HYDE --> ROUTE
+
+    SQ --> ROUTE
+
+    QEMB --> ROUTE
+
+
+    %% =========================================================
+    %%                    MULTI SOURCE RETRIEVAL
+    %% =========================================================
+
+    ROUTE --> SQL[SQL Adapter]
+
+    ROUTE --> VDBA[Vector Adapter]
+
+    ROUTE --> S3A[S3 Adapter]
+
+    ROUTE --> MONGO[MongoDB Adapter]
+
+
+    SQL --> SQLDB
+
+    VDBA --> VDB
+
+    S3A --> S3
+
+    MONGO --> MONGODB[(MongoDB)]
+
+
+    %% =========================================================
+    %%                    RETRIEVAL PIPELINE
+    %% =========================================================
+
+    SQLDB --> AGG[Result Aggregation]
+
+    VDB --> AGG
+
+    S3 --> AGG
+
+    MONGODB --> AGG
+
+    AGG --> FILTER[Metadata Filtering]
+
+    FILTER --> PERM[Permission / Tenant Filtering]
+
+    PERM --> DEDUP[Deduplication]
+
+    DEDUP --> SEARCH[Multi-Query Retrieval]
+
+    SEARCH --> RRF[Reciprocal Rank Fusion]
+
+    RRF --> RR[Cross-Encoder / LLM Re-Ranker]
+
+    RR --> TOPK[Top-K Relevant Context]
+
+
+    %% =========================================================
+    %%                    CONTEXT CONSTRUCTION
+    %% =========================================================
+
+    TOPK --> CB[Context Builder]
+
+    CB --> PROMPT[Grounded Prompt Construction]
+
+    PROMPT --> LLM[Generation LLM]
+
+
+    %% =========================================================
+    %%                    EVALUATION / CRAG
+    %% =========================================================
+
+    LLM --> CRAG[CRAG Evaluator]
+
+    CRAG --> GROUND[Groundedness Check]
+
+    CRAG --> REL[Relevance Check]
+
+    CRAG --> COMPLETE[Completeness Check]
+
+    CRAG --> HALL[Hallucination Check]
+
+    GROUND --> DECIDE{Answer Quality?}
+
+    REL --> DECIDE
+
+    COMPLETE --> DECIDE
+
+    HALL --> DECIDE
+
+    DECIDE -->|Good| OUT
+
+    DECIDE -->|Bad| RETRY[Corrective Retrieval]
+
+    RETRY --> KEYWORDS[Missing Keywords / Better Query]
+
+    KEYWORDS --> ROUTE
+
+
+    %% =========================================================
+    %%                    OUTPUT GUARDRAILS
+    %% =========================================================
+
+    OUT --> OPII[Output PII Check]
+
+    OPII --> SAFETY[Safety / Policy Check]
+
+    SAFETY --> FINAL[✅ Final Grounded Response]
+
+
+    %% =========================================================
+    %%                    BACKGROUND INDEXING
+    %% =========================================================
+
+    subgraph ASYNC["⚙️ ASYNC BACKGROUND PROCESSING"]
+
+        JOB[Ingestion Job]
+
+        JOB --> QUEUE[BullMQ Queue]
+
+        QUEUE --> REDIS[(Redis)]
+
+        REDIS --> WORKER[Indexing Worker]
+
+        WORKER --> PARSE
+
+    end
+
+
+    %% =========================================================
+    %%                    RELATIONSHIPS
+    %% =========================================================
+
+    INGEST -.-> JOB
+```
+
+# Basic to Production
+### A **color-coded Mermaid architecture** will make the Production RAG flow much easier to understand. I’d use different colors for **Indexing, Query Processing, Retrieval, Generation, Evaluation, Security, and Storage**.
+
+```mermaid
+flowchart TD
+
+    %% =========================================================
+    %% INDEXING PIPELINE
+    %% =========================================================
+
+    subgraph INDEXING["📚 INDEXING PIPELINE"]
+
+        DS["📄 Data Sources"]
+        INGEST["Document Ingestion"]
+        PARSE["Document Parsing"]
+        CLEAN["Cleaning / Normalization"]
+        CHUNK["Chunking"]
+        META["Metadata Enrichment"]
+        ACL["Access Control / Tenant Metadata"]
+        EMBED["Embedding Model"]
+        VECTOR["Vector Embeddings"]
+        STORE["Document / Chunk Storage"]
+
+        DS --> INGEST
+        INGEST --> PARSE
+        PARSE --> CLEAN
+        CLEAN --> CHUNK
+        CHUNK --> META
+        META --> ACL
+
+        ACL --> EMBED
+        ACL --> STORE
+        EMBED --> VECTOR
+    end
+
+
+    %% =========================================================
+    %% STORAGE
+    %% =========================================================
+
+    subgraph STORAGE["🗄️ STORAGE LAYER"]
+
+        VDB[("Qdrant<br/>Vector Database")]
+        SQLDB[("PostgreSQL")]
+        S3[("S3<br/>Object Storage")]
+        MONGODB[("MongoDB")]
+        REDIS[("Redis")]
+    end
+
+    VECTOR --> VDB
+    STORE --> SQLDB
+    STORE --> S3
+
+
+    %% =========================================================
+    %% ASYNC PROCESSING
+    %% =========================================================
+
+    subgraph ASYNC["⚙️ ASYNC INDEXING"]
+
+        JOB["Ingestion Job"]
+        QUEUE["BullMQ Queue"]
+        WORKER["Indexing Worker"]
+
+        JOB --> QUEUE
+        QUEUE --> REDIS
+        REDIS --> WORKER
+        WORKER --> INGEST
+    end
+
+    INGEST -.-> JOB
+
+
+    %% =========================================================
+    %% USER QUERY
+    %% =========================================================
+
+    USER["👤 User"]
+
+    API["API Gateway"]
+
+    USER --> API
+
+
+    %% =========================================================
+    %% SECURITY
+    %% =========================================================
+
+    subgraph SECURITY["🔐 SECURITY & GUARDRAILS"]
+
+        INPUT["Input Guardrails"]
+        PII["PII Detection / Masking"]
+        JAIL["Jailbreak / Injection Detection"]
+        AUTH["Authentication / Authorization"]
+
+        INPUT --> PII
+        PII --> JAIL
+        JAIL --> AUTH
+    end
+
+    API --> INPUT
+
+
+    %% =========================================================
+    %% QUERY PROCESSING
+    %% =========================================================
+
+    subgraph QUERY["🧠 QUERY PROCESSING"]
+
+        ROUTER["Query Router"]
+        CACHE{"Cache?"}
+
+        TRANSLATION["Query Translation"]
+
+        REWRITE["Query Rewrite"]
+        STEPBACK["Step-Back"]
+        HYDE["HyDE"]
+        SUBQUERY["Sub-Queries"]
+        QEMBED["Query Embedding"]
+
+        ROUTER --> CACHE
+
+        CACHE -->|Miss| TRANSLATION
+
+        TRANSLATION --> REWRITE
+        TRANSLATION --> STEPBACK
+        TRANSLATION --> HYDE
+        TRANSLATION --> SUBQUERY
+        TRANSLATION --> QEMBED
+    end
+
+    AUTH --> ROUTER
+
+
+    %% =========================================================
+    %% RETRIEVAL
+    %% =========================================================
+
+    subgraph RETRIEVAL["🔎 RETRIEVAL PIPELINE"]
+
+        RROUTER["Retrieval Router"]
+
+        SQLA["SQL Adapter"]
+        VECTORA["Vector Adapter"]
+        S3A["S3 Adapter"]
+        MONGOA["MongoDB Adapter"]
+
+        AGG["Result Aggregation"]
+        FILTER["Metadata Filtering"]
+        PERMISSION["Permission Filtering"]
+        DEDUP["Deduplication"]
+        SEARCH["Multi-Query Search"]
+        RRF["RRF Fusion"]
+        RERANK["Cross-Encoder / LLM Re-Ranker"]
+        TOPK["Top-K Context"]
+
+        RROUTER --> SQLA
+        RROUTER --> VECTORA
+        RROUTER --> S3A
+        RROUTER --> MONGOA
+
+        SQLA --> AGG
+        VECTORA --> AGG
+        S3A --> AGG
+        MONGOA --> AGG
+
+        AGG --> FILTER
+        FILTER --> PERMISSION
+        PERMISSION --> DEDUP
+        DEDUP --> SEARCH
+        SEARCH --> RRF
+        RRF --> RERANK
+        RERANK --> TOPK
+    end
+
+
+    REWRITE --> RROUTER
+    STEPBACK --> RROUTER
+    HYDE --> RROUTER
+    SUBQUERY --> RROUTER
+    QEMBED --> RROUTER
+
+    SQLA --> SQLDB
+    VECTORA --> VDB
+    S3A --> S3
+    MONGOA --> MONGODB
+
+
+    %% =========================================================
+    %% GENERATION
+    %% =========================================================
+
+    subgraph GENERATION["🤖 GENERATION"]
+
+        CONTEXT["Context Builder"]
+        PROMPT["Grounded Prompt"]
+        LLM["Generation LLM"]
+
+        CONTEXT --> PROMPT
+        PROMPT --> LLM
+    end
+
+    TOPK --> CONTEXT
+
+
+    %% =========================================================
+    %% EVALUATION
+    %% =========================================================
+
+    subgraph EVALUATION["🎯 CRAG / EVALUATION"]
+
+        CRAG["CRAG Evaluator"]
+
+        GROUND["Groundedness"]
+        RELEVANCE["Relevance"]
+        COMPLETE["Completeness"]
+        HALLUCINATION["Hallucination"]
+
+        DECISION{"Quality OK?"}
+
+        CRAG --> GROUND
+        CRAG --> RELEVANCE
+        CRAG --> COMPLETE
+        CRAG --> HALLUCINATION
+
+        GROUND --> DECISION
+        RELEVANCE --> DECISION
+        COMPLETE --> DECISION
+        HALLUCINATION --> DECISION
+    end
+
+    LLM --> CRAG
+
+
+    %% =========================================================
+    %% CORRECTIVE RETRIEVAL
+    %% =========================================================
+
+    RETRY["🔁 Corrective Retrieval"]
+    BETTER["Improved Query / Missing Keywords"]
+
+    DECISION -->|Bad| RETRY
+    RETRY --> BETTER
+    BETTER --> RROUTER
+
+
+    %% =========================================================
+    %% OUTPUT SECURITY
+    %% =========================================================
+
+    subgraph OUTPUTSEC["🛡️ OUTPUT GUARDRAILS"]
+
+        OUTPII["Output PII Check"]
+        SAFETY["Safety / Policy Check"]
+    end
+
+    DECISION -->|Good| OUTPII
+    OUTPII --> SAFETY
+
+    SAFETY --> FINAL["✅ Final Grounded Response"]
+
+
+    %% =========================================================
+    %% CACHE HIT
+    %% =========================================================
+
+    CACHE -->|Hit| OUTPII
+
+
+    %% =========================================================
+    %% COLORS
+    %% =========================================================
+
+    classDef indexing fill:#E3F2FD,stroke:#1565C0,stroke-width:2px,color:#0D1B2A;
+    classDef storage fill:#EDE7F6,stroke:#6A1B9A,stroke-width:2px,color:#21002F;
+    classDef async fill:#FFF3E0,stroke:#EF6C00,stroke-width:2px,color:#3E1F00;
+    classDef security fill:#FFEBEE,stroke:#C62828,stroke-width:2px,color:#3A0000;
+    classDef query fill:#E8F5E9,stroke:#2E7D32,stroke-width:2px,color:#0B2E13;
+    classDef retrieval fill:#FFF8E1,stroke:#F9A825,stroke-width:2px,color:#3E2A00;
+    classDef generation fill:#F3E5F5,stroke:#8E24AA,stroke-width:2px,color:#2A0033;
+    classDef evaluation fill:#E0F7FA,stroke:#00838F,stroke-width:2px,color:#002B30;
+    classDef retry fill:#FCE4EC,stroke:#AD1457,stroke-width:2px,color:#3B001B;
+    classDef final fill:#C8E6C9,stroke:#2E7D32,stroke-width:3px,color:#0B2E13;
+
+    class DS,INGEST,PARSE,CLEAN,CHUNK,META,ACL,EMBED,VECTOR,STORE indexing;
+
+    class VDB,SQLDB,S3,MONGODB,REDIS storage;
+
+    class JOB,QUEUE,WORKER async;
+
+    class API,INPUT,PII,JAIL,AUTH,OUTPII,SAFETY security;
+
+    class USER,ROUTER,CACHE,TRANSLATION,REWRITE,STEPBACK,HYDE,SUBQUERY,QEMBED query;
+
+    class RROUTER,SQLA,VECTORA,S3A,MONGOA,AGG,FILTER,PERMISSION,DEDUP,SEARCH,RRF,RERANK,TOPK retrieval;
+
+    class CONTEXT,PROMPT,LLM generation;
+
+    class CRAG,GROUND,RELEVANCE,COMPLETE,HALLUCINATION,DECISION evaluation;
+
+    class RETRY,BETTER retry;
+
+    class FINAL final;
+```
+
+### Color meaning
+
+* 🔵 **Blue** → Indexing & knowledge ingestion
+* 🟣 **Purple** → Storage layer
+* 🟠 **Orange** → Async/background processing
+* 🔴 **Red** → Security & guardrails
+* 🟢 **Green** → Query processing
+* 🟡 **Yellow** → Retrieval
+* 🟪 **Violet** → LLM generation
+* 🩵 **Cyan** → CRAG evaluation
+* 🌸 **Pink** → Corrective retrieval
+* 🟩 **Green** → Final grounded response
+
+This version also makes the **Indexing → Storage → Query → Retrieval → Generation → CRAG → Output** lifecycle visually distinct.
