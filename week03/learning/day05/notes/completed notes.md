@@ -2677,7 +2677,7 @@ And the most important production lesson:
 
 
 
-# 73. Complete Production Advanced RAG
+#  Complete Production Advanced RAG
 
 ```mermaid
 flowchart TD
