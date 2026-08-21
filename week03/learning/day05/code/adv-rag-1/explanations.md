@@ -149,3 +149,153 @@ The project is structured according to modular production practices:
    - **Redis Store**: Port `6379`
    - **PostgreSQL**: Port `5432`
 4. **`README.md`**: Setup instructions, execution guides, and technical highlights.
+
+---
+---
+
+```mermaid
+flowchart TB
+
+    %% =========================
+    %% INGESTION
+    %% =========================
+
+    A["Data Sources"]
+    B["Async Ingestion"]
+    C["Parse"]
+    D["Chunk"]
+    E["Embed"]
+    F[("Qdrant")]
+
+    A --> B --> C --> D --> E --> F
+
+
+    %% =========================
+    %% QUERY
+    %% =========================
+
+    U["User Query"]
+
+    G["Input Guardrails"]
+
+    H["Query Translation"]
+
+    H1["Rewrite"]
+    H2["Step-Back"]
+    H3["Sub-Query"]
+    H4["HyDE"]
+
+    U --> G --> H
+
+    H --> H1
+    H --> H2
+    H --> H3
+    H --> H4
+
+
+    %% =========================
+    %% ROUTING
+    %% =========================
+
+    R["Query Router"]
+
+    H1 --> R
+    H2 --> R
+    H3 --> R
+    H4 --> R
+
+
+    %% =========================
+    %% DATA SOURCES
+    %% =========================
+
+    DB1[("PostgreSQL")]
+    DB2[("Qdrant")]
+    DB3[("MongoDB")]
+    DB4[("S3")]
+
+    R --> DB1
+    R --> DB2
+    R --> DB3
+    R --> DB4
+
+    F --> DB2
+
+
+    %% =========================
+    %% RETRIEVAL
+    %% =========================
+
+    RF["Retrieval"]
+
+    RF1["Filtering"]
+    RF2["Vector Search"]
+    RF3["RRF Fusion"]
+    RF4["Reranking"]
+
+    DB1 --> RF
+    DB2 --> RF
+    DB3 --> RF
+    DB4 --> RF
+
+    RF --> RF1 --> RF2 --> RF3 --> RF4
+
+
+    %% =========================
+    %% GENERATION
+    %% =========================
+
+    CTX["Context Builder"]
+
+    LLM["LLM"]
+
+    RF4 --> CTX --> LLM
+
+
+    %% =========================
+    %% EVALUATION
+    %% =========================
+
+    EVAL["CRAG Evaluation"]
+
+    LLM --> EVAL
+
+    EVAL -->|PASS| OG["Output Guardrails"]
+    EVAL -->|FAIL| RETRY["Corrective Retrieval"]
+
+    RETRY --> RF
+
+
+    %% =========================
+    %% FINAL
+    %% =========================
+
+    OG --> FINAL["Final Answer"]
+
+
+    %% =========================
+    %% STYLES
+    %% =========================
+
+    classDef source fill:#f5f5f5,stroke:#333,stroke-width:2px,color:#111;
+    classDef process fill:#e8f1ff,stroke:#2563eb,stroke-width:2px,color:#111;
+    classDef query fill:#fff4d6,stroke:#d97706,stroke-width:2px,color:#111;
+    classDef retrieval fill:#e8f8ef,stroke:#16a34a,stroke-width:2px,color:#111;
+    classDef generation fill:#f3e8ff,stroke:#9333ea,stroke-width:2px,color:#111;
+    classDef security fill:#ffe8e8,stroke:#dc2626,stroke-width:2px,color:#111;
+    classDef database fill:#e8e8ff,stroke:#4f46e5,stroke-width:2px,color:#111;
+    classDef final fill:#dcfce7,stroke:#15803d,stroke-width:3px,color:#111;
+
+    class A,B,C,D,E source;
+    class F,DB1,DB2,DB3,DB4 database;
+
+    class U,H,H1,H2,H3,H4,R query;
+
+    class RF,RF1,RF2,RF3,RF4 retrieval;
+
+    class CTX,LLM,EVAL,RETRY generation;
+
+    class G,OG security;
+
+    class FINAL final;
+```
