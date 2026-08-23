@@ -15,7 +15,7 @@ This repository contains a full production JavaScript / Node.js implementation p
 flowchart TD
     UserQuery[User Input Query] --> ChoiceEngine{System Architecture Strategy}
 
-    subgraph Vectorless RAG / PageIndex Pipeline (Gemini)
+    subgraph "Vectorless RAG / PageIndex Pipeline (Gemini)"
         ChoiceEngine -->|Structured Technical Manual| RootInspect[1. Inspect Tree Index Root Node]
         RootInspect --> GeminiPruner[2. Gemini API Evaluates Branch Summaries]
         GeminiPruner --> BranchSelect[3. Agentic Search Engine Selects Target Branch]
@@ -23,13 +23,14 @@ flowchart TD
         LeafNode --> LazyFetch[5. Lazy-Load Full Raw Text for Target Pages]
     end
 
-    subgraph LLM Wiki / Karpathy Pipeline (Gemini)
-        ChoiceEngine -->|Heterogeneous Wiki Catalog| Pass1[1. Pass 1: Gemini Scans Catalog Summaries & Tags - 0% Text Loaded]
+    subgraph "LLM Wiki / Karpathy Pipeline (Gemini)"
+        ChoiceEngine -->|Heterogeneous Wiki Catalog| Pass1["1. Pass 1: Gemini Scans Catalog Summaries & Tags (0% Text Loaded)"]
         Pass1 --> CandidateFilter[2. Filter Candidate Markdown File]
         CandidateFilter --> Pass2[3. Pass 2: Selective Full Markdown Content Loading]
     end
 
-    LazyFetch & Pass2 --> Answer[Grounded LLM Answer with Explicit Section & Page Citations]
+    LazyFetch --> Answer[Grounded LLM Answer with Explicit Section & Page Citations]
+    Pass2 --> Answer
 ```
 
 ---
