@@ -1,0 +1,28 @@
+{
+  "name": "vectorless-rag01",
+  "version": "1.0.0",
+  "description": "Production JavaScript implementation of Vectorless RAG, Hierarchical Tree Indexing (PageIndex Model), and LLM Wiki Architecture (Karpathy Model)",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "cli": "node src/cli.js",
+    "tree-search": "node src/cli.js --mode=tree",
+    "llm-wiki": "node src/cli.js --mode=wiki",
+    "benchmark": "node src/cli.js --mode=benchmark"
+  },
+  "keywords": [
+    "vectorless-rag",
+    "pageindex",
+    "tree-search",
+    "llm-wiki",
+    "karpathy",
+    "javascript",
+    "nodejs"
+  ],
+  "dependencies": {
+    "dotenv": "^16.4.5"
+  },
+  "author": "GenAI Cohort 2026",
+  "license": "ISC"
+}
