@@ -79,3 +79,39 @@
 
 🔗 **Read More:**
 [Day 04 Main Index](./week02/learning/day04/index.md) | [GitHub Link](https://github.com/Amie-dev/Gen-AI-Cohort-2026/blob/main/week02/learning/day04/index.md)
+
+---
+
+🗓️ **Week 03 — Production Advanced RAG & Vectorless Knowledge Engines**
+> Master production-grade Advanced RAG architectures, query translation techniques, multi-source routing, Reciprocal Rank Fusion, CRAG evaluation, PII guardrails, vectorless hierarchical tree indexing (PageIndex), and Andrej Karpathy's LLM Wiki paradigm.
+
+---
+
+📅 **Day 05 — Production Advanced RAG Architecture & Multi-Source Pipelines**
+* Naive RAG vs. Production Advanced RAG (Query Mismatch, Distance Mismatch)
+* Pre-Retrieval Query Translation (Query Rewriting, Step-Back Prompting, Sub-Query Decomposition, HyDE)
+* Intent-Based Query Routing & Multi-Source Database Adapters (PostgreSQL Auth DB, Qdrant Vector DB, MongoDB, AWS S3)
+* Reciprocal Rank Fusion (RRF) & Cross-Encoder Semantic Re-Ranking
+* Self-Reflective Evaluation via Corrective RAG (CRAG Score Evaluation & Retry Loops)
+* Input & Output Security Guardrails (Bidirectional PII Masking & Jailbreak Defense)
+* Latency Optimization & Asynchronous Queues (BullMQ + Redis Job Processing)
+* Production System Implementations (OpenAI & Google Gemini SDK Adapters)
+
+🔗 **Read More:**
+[Day 05 Main Index](./week03/learning/day05/notes/index.md) | [GitHub Link](https://github.com/Amie-dev/Gen-AI-Cohort-2026/blob/main/week03/learning/day05/notes/index.md)
+
+---
+
+📅 **Day 06 — Vectorless RAG, Hierarchical Tree Indexing & LLM Wiki Engines**
+* Limitations of Standard Vector RAG & The Abrupt Token Chunking Problem
+* Semantic Similarity vs. Contextual Relevance ($\text{Vector Similarity} \neq \text{Relevance}$)
+* Vectorless RAG & Tree-Structured Indexing (PageIndex Architecture Model)
+* Natural Structural Document Parsing & Metadata Node Summaries (`Root -> Chapter -> Section -> Page`)
+* AlphaGo-Inspired Top-Down Agentic Tree Traversal & Zero-Vector Relevance Reasoning
+* Andrej Karpathy's LLM Wiki Paradigm (Obsidian & Markdown Knowledge Vault Management)
+* Two-Pass Retrieval Strategy (Lightweight Metadata Summary Scan + Selective Full Content Lazy Loading)
+* System System Comparison: Vector RAG vs. Vectorless RAG vs. LLM Wiki vs. Enterprise Hybrid RAG
+* Full Node.js JavaScript Code Implementations (`vectorless-rag01`)
+
+🔗 **Read More:**
+[Day 06 Main Index](./week03/learning/day06/notes/index.md) | [GitHub Link](https://github.com/Amie-dev/Gen-AI-Cohort-2026/blob/main/week03/learning/day06/notes/index.md)
