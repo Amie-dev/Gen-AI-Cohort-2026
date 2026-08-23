@@ -1,0 +1,21 @@
+{
+  "name": "day06-vectorless-rag-and-llm-wiki",
+  "version": "1.0.0",
+  "description": "Week 03 Day 06 JavaScript Implementation of Vectorless RAG, Tree Indexing, and LLM Wiki",
+  "type": "module",
+  "main": "vectorless-rag-tree-indexer.js",
+  "scripts": {
+    "tree-search": "node vectorless-rag-tree-indexer.js",
+    "llm-wiki": "node llm-wiki-two-pass-engine.js",
+    "compare": "node compare-rag-approaches.js"
+  },
+  "keywords": [
+    "vectorless-rag",
+    "pageindex",
+    "tree-search",
+    "llm-wiki",
+    "javascript"
+  ],
+  "author": "GenAI Cohort 2026",
+  "license": "ISC"
+}
