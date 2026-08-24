@@ -1,0 +1,28 @@
+{
+  "name": "adv-vectorless-rag",
+  "version": "1.0.0",
+  "description": "Advanced Vectorless RAG Engine (PageIndex Model & Karpathy LLM Wiki Architecture) in JavaScript",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "cli": "node src/cli.js",
+    "tree-search": "node src/cli.js --mode=tree",
+    "llm-wiki": "node src/cli.js --mode=wiki",
+    "benchmark": "node src/cli.js --mode=benchmark"
+  },
+  "keywords": [
+    "vectorless-rag",
+    "pageindex",
+    "llm-wiki",
+    "agentic-search",
+    "karpathy-architecture",
+    "mcts",
+    "gemini-api"
+  ],
+  "author": "Antigravity AI Team",
+  "license": "MIT",
+  "dependencies": {
+    "@google/generative-ai": "^0.21.0"
+  }
+}
