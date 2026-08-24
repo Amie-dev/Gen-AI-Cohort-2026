@@ -1,6 +1,6 @@
 # 🎯 Week 03 — Day 06 Interview Questions & Deep Dive Answers
 
-# Topic: Vectorless RAG, Hierarchical Tree Indexing, Agentic Search & LLM Wiki Engines
+**Topic:** Vectorless RAG, Hierarchical Tree Indexing, Agentic Search & LLM Wiki Engines
 
 > **Target Audience:** Principal AI Architects, Knowledge Graph Engineers, and Advanced RAG Pipeline Engineers.
 
@@ -8,11 +8,11 @@
 
 ## 📑 Table of Contents
 
-1. [Category 1 — Vectorless RAG Paradigm & Chunking Failure Modes](#1-category-1--vectorless-rag-paradigm--chunking-failure-modes)
-2. [Category 2 — Tree-Structured Indexing & Hierarchy Navigation](#2-category-2--tree-structured-indexing--hierarchy-navigation)
-3. [Category 3 — Agentic Tree Search & Beam Search](#3-category-3--agentic-tree-search--beam-search)
-4. [Category 4 — LLM Wiki Architecture & Karpathy Knowledge Engines](#4-category-4--llm-wiki-architecture--karpathy-knowledge-engines)
-5. [Category 5 — Practical Node.js & Tree Search Implementations](#5-category-5--practical-nodejs--tree-search-implementations)
+1. Category 1 — Vectorless RAG Paradigm & Chunking Failure Modes
+2. Category 2 — Tree-Structured Indexing & Hierarchy Navigation
+3. Category 3 — Agentic Tree Search & Beam Search
+4. Category 4 — LLM Wiki Architecture & Knowledge Engines
+5. Category 5 — Practical Node.js & Tree Search Implementations
 
 ---
 
@@ -20,152 +20,593 @@
 
 ## Q1: What is Vectorless RAG and how does it fundamentally differ from traditional Vector RAG?
 
-### 💡 Answer:
-* **Vector RAG:** Asks *"Which chunks are semantically similar to my query vector?"* using dense embedding similarity.
-* **Vectorless RAG:** Asks *"Where in the document's logical structure should I look?"* by representing documents as hierarchical trees and using LLMs to navigate structural nodes without vector embeddings.
+### 💡 Answer
 
-### 📊 Vector RAG vs Vectorless RAG Core Comparison:
+**Vectorless RAG** is a retrieval architecture that does not depend primarily on dense vector embeddings. Instead, it preserves the document's **logical hierarchy** and uses that structure to navigate toward relevant information.
 
-| Dimension | Vector RAG | Vectorless RAG |
-| :--- | :--- | :--- |
-| **Search Mechanism** | Nearest-neighbor vector distance ($\cos \theta$). | Hierarchical structural navigation (LLM Tree Traversal). |
-| **Document Structure** | Destroyed during flat chunking. | Preserved explicitly (Headers, Sections, Chapters). |
-| **Global Context** | Poor (Loses macro-level document understanding). | High (Understands document outline and relationship web). |
-| **Best Used For** | Large collections of short, unstructured text. | Complex, long, highly-structured documents (Books, Legal, Finance). |
+Traditional Vector RAG asks:
+
+> "Which chunks are semantically closest to this query?"
+
+Vectorless RAG asks:
+
+> "Which section of the document's structure is most likely to contain the answer?"
+
+### 📊 Comparison
+
+| Dimension                | Vector RAG                 | Vectorless RAG             |
+| ------------------------ | -------------------------- | -------------------------- |
+| **Search mechanism**     | Vector similarity          | Structural/tree navigation |
+| **Representation**       | Flat chunks + embeddings   | Hierarchical nodes         |
+| **Document structure**   | Often partially lost       | Explicitly preserved       |
+| **Global understanding** | Limited                    | Strong                     |
+| **Embeddings required**  | Usually yes                | Not necessarily            |
+| **Best for**             | Large unstructured corpora | Long, structured documents |
+
+### Example
+
+Imagine a 500-page company policy document:
+
+```text
+Company Policy
+├── HR
+│   ├── Leave Policy
+│   └── Recruitment
+├── Finance
+│   ├── Expenses
+│   └── Budget
+└── Security
+    ├── Authentication
+    └── Encryption
+```
+
+For:
+
+> "What encryption standard does the company use?"
+
+A vector system searches embedded chunks.
+
+A tree-based system can navigate:
+
+```text
+Root
+ ↓
+Security
+ ↓
+Encryption
+ ↓
+Leaf Content
+```
+
+### 🎯 Interview Point
+
+Vectorless RAG is **not simply "RAG without embeddings."** The important idea is that **document structure becomes part of the retrieval mechanism**.
 
 ---
 
-## Q2: Explain the "Abrupt Chunking Problem" in Vector RAG.
+# Q2: Explain the "Abrupt Chunking Problem" in Vector RAG.
 
-### 💡 Answer:
-Traditional RAG slices documents into fixed token chunks (e.g. 500 tokens). This creates three severe structural failures:
-1. **Header-Content Disconnection:** A section title (e.g., `Section 4.2: Load Balancing`) falls into Chunk 1, while its core explanation falls into Chunk 2. Searching for "Load Balancing" retrieves Chunk 1 without the necessary details.
-2. **Table Severing:** Multipage or complex data tables get cut across chunk boundaries, corrupting tabular data.
-3. **Loss of Global Perspective:** Summarization queries (*"What are the 5 core themes of this 200-page book?"*) fail because vector similarity search retrieves local micro-chunks rather than macro summaries.
+### 💡 Answer
+
+Traditional RAG commonly divides documents into fixed-size chunks.
+
+For example:
+
+```text
+Document
+   ↓
+500 tokens
+   ↓
+500 tokens
+   ↓
+500 tokens
+   ↓
+500 tokens
+```
+
+This is simple, but it can destroy important relationships.
+
+### 1. Header-Content Disconnection
+
+```text
+Chunk 1:
+## Authentication
+
+Chunk 2:
+The system uses OAuth 2.0...
+```
+
+A query for **"authentication"** may retrieve the heading without the explanation.
+
+### 2. Table Severing
+
+A table can be split:
+
+```text
+Chunk 1
+----------------
+| Product | Price
+| A       | $100
+----------------
+
+Chunk 2
+----------------
+| Product | Price
+| B       | $200
+----------------
+```
+
+The retrieval system may receive incomplete information.
+
+### 3. Loss of Global Context
+
+A question such as:
+
+> "What are the major themes of this 300-page report?"
+
+requires information from across the document.
+
+Retrieving a few local chunks may not provide enough global context.
+
+### 🎯 Core Problem
+
+```text
+Original Document
+       ↓
+   Flat Chunking
+       ↓
+Structure Lost
+       ↓
+Retrieval Becomes Harder
+```
+
+Tree-based approaches attempt to preserve that lost structure.
 
 ---
 
 # 2. Category 2 — Tree-Structured Indexing & Hierarchy Navigation
 
-## Q3: How does Tree Indexing work in Vectorless RAG?
+# Q3: How does Tree Indexing work in Vectorless RAG?
 
-### 💡 Answer:
-Vectorless RAG parses structured text (Markdown, HTML, PDFs with TOCs) into a **Hierarchical Tree Representation**:
+### 💡 Answer
+
+Instead of treating a document as an unordered collection of chunks, we convert it into a **hierarchical tree**.
+
+For example:
 
 ```text
-                                [ Root Node: Full Document ]
-                                             │
-                  ┌──────────────────────────┴──────────────────────────┐
-                  ▼                                                     ▼
-    [ Chapter 1: Architecture ]                            [ Chapter 2: Security ]
-                  │                                                     │
-         ┌────────┴────────┐                                   ┌────────┴────────┐
-         ▼                 ▼                                   ▼                 ▼
-   [ Sec 1.1: System ] [ Sec 1.2: Memory ]               [ Sec 2.1: Auth ]   [ Sec 2.2: Encryption ]
-         │                 │                                   │                 │
-         ▼                 ▼                                   ▼                 ▼
-   (Leaf Content)    (Leaf Content)                      (Leaf Content)    (Leaf Content)
+                 Root Document
+                      │
+          ┌───────────┴───────────┐
+          ▼                       ▼
+      Chapter 1               Chapter 2
+    Architecture              Security
+          │                       │
+     ┌────┴────┐             ┌────┴────┐
+     ▼         ▼             ▼         ▼
+   Sec 1.1   Sec 1.2       Sec 2.1   Sec 2.2
+     │         │             │         │
+     ▼         ▼             ▼         ▼
+   Content   Content       Content   Content
 ```
 
-Each non-leaf node contains a high-level summary generated by an LLM during the indexing phase, allowing rapid structural traversal.
+Each node can contain:
+
+* `id`
+* `title`
+* `level`
+* `summary`
+* `content`
+* `children`
+* metadata
+
+### Example Node
+
+```javascript
+{
+  id: "section-2-2",
+  title: "Encryption",
+  level: 3,
+  summary: "Describes encryption standards used by the company.",
+  content: "The company uses AES-256...",
+  children: []
+}
+```
+
+### Why summaries matter
+
+A parent node doesn't necessarily need to contain the entire content of all children.
+
+Instead:
+
+```text
+Chapter
+   ↓
+Summary
+   ↓
+Section summaries
+   ↓
+Leaf content
+```
+
+The LLM can use these summaries to decide which branch to explore.
 
 ---
 
-## Q4: Compare Top-Down Tree Traversal vs Bottom-Up Aggregation in document tree search.
+# Q4: Compare Top-Down Tree Traversal vs Bottom-Up Aggregation.
 
-### 💡 Answer:
-* **Top-Down Traversal:** Used for targeted factual lookups (*"What is the encryption standard in Section 2.2?"*). The LLM starts at the Root, inspects high-level chapter summaries, selects the most relevant branch, and drill down to leaf nodes.
-* **Bottom-Up Aggregation:** Used for global synthesis (*"Summarize the entire 300-page report"*). Summaries roll up recursively from Leaf nodes $\to$ Section nodes $\to$ Chapter nodes $\to$ Root summary.
+### 💡 Answer
+
+These approaches solve different retrieval problems.
+
+## 🔽 Top-Down Traversal
+
+Best for **specific questions**.
+
+Example:
+
+> "What encryption algorithm is used?"
+
+The system starts from the root:
+
+```text
+Root
+ ↓
+Security
+ ↓
+Encryption
+ ↓
+Leaf
+```
+
+The LLM progressively narrows the search space.
+
+### Advantages
+
+* Efficient for targeted questions
+* Preserves document hierarchy
+* Avoids searching every leaf
+* Useful for large structured documents
+
+---
+
+## 🔼 Bottom-Up Aggregation
+
+Best for **global questions**.
+
+Example:
+
+> "Summarize the entire report."
+
+The system aggregates:
+
+```text
+Leaf summaries
+      ↓
+Section summary
+      ↓
+Chapter summary
+      ↓
+Document summary
+```
+
+### 🎯 Simple Rule
+
+```text
+Specific Question → Top-Down
+
+Global Question → Bottom-Up
+```
 
 ---
 
 # 3. Category 3 — Agentic Tree Search & Beam Search
 
-## Q5: What is Agentic Tree Search?
+# Q5: What is Agentic Tree Search?
 
-### 💡 Answer:
-**Agentic Tree Search** uses an LLM as an autonomous navigating agent. Instead of retrieving chunks via static embeddings, the agent receives the document's Table of Contents or parent node summaries and iteratively decides which node branch to explore:
+### 💡 Answer
+
+**Agentic Tree Search** uses an LLM as a decision-making navigator.
+
+Instead of blindly retrieving chunks, the LLM determines **which branch of the document tree should be explored next**.
+
+### Flow
 
 ```text
-1. Agent inspects Root Table of Contents.
-2. Agent decides: "The query asks about database memory, so I will enter Section 3: Storage Engines."
-3. Agent inspects Section 3 sub-headings and navigates to Section 3.2.
-4. Agent reads leaf content and formulates the response.
+User Query
+    ↓
+Root
+    ↓
+Inspect Children
+    ↓
+Choose Relevant Branch
+    ↓
+Inspect Subsections
+    ↓
+Choose Relevant Section
+    ↓
+Leaf Content
+    ↓
+Answer
 ```
 
+### Example
+
+User asks:
+
+> "How is database memory managed?"
+
+Agent:
+
+```text
+Root
+ ↓
+Architecture
+ ↓
+Storage
+ ↓
+Memory Management
+ ↓
+Leaf Content
+```
+
+The important difference is that **retrieval becomes a navigation problem**.
+
 ---
 
-## Q6: How does Branch Pruning and Beam Search optimize latency in Agentic Tree Search?
+# Q6: How do Branch Pruning and Beam Search optimize Agentic Tree Search?
 
-### 💡 Answer:
-* **Branch Pruning:** If a document tree has 50 chapters, the navigating LLM agent inspects top-level summaries and immediately discards (prunes) 45 irrelevant branches, focusing compute only on the top 5 relevant sub-trees.
-* **Beam Search (Width $B$):** Instead of following a single path, the agent keeps the top $B$ most promising node paths active simultaneously at each depth level, preventing the agent from getting trapped in a sub-optimal branch.
+### 💡 Answer
+
+Consider a document with:
+
+```text
+50 Chapters
+500 Sections
+5000 Leaf Nodes
+```
+
+Exploring every node would be extremely expensive.
+
+## 🌳 Branch Pruning
+
+The agent evaluates the top-level branches:
+
+```text
+50 Chapters
+    ↓
+Evaluate relevance
+    ↓
+Keep Top 5
+    ↓
+Discard 45
+```
+
+This dramatically reduces search cost.
 
 ---
 
-# 4. Category 4 — LLM Wiki Architecture & Karpathy Knowledge Engines
+## 🔦 Beam Search
 
-## Q7: What is the LLM Wiki Architecture (inspired by Andrej Karpathy)?
+Instead of keeping only one path, maintain several promising paths.
 
-### 💡 Answer:
-Inspired by Andrej Karpathy's vision of organized knowledge bases, the **LLM Wiki Architecture** organizes an AI agent's knowledge into a structured, human-readable markdown wiki (similar to Obsidian):
+For example:
+
+```text
+             Root
+               │
+        ┌──────┼──────┐
+        ▼      ▼      ▼
+       A       B      C
+       │       │      │
+       ▼       ▼      ▼
+      A1      B2      C1
+```
+
+With:
+
+```text
+Beam Width = 3
+```
+
+the system keeps three promising paths instead of committing to one.
+
+### Why?
+
+If the first choice is wrong:
+
+```text
+Single Path
+Root → A → Wrong ❌
+```
+
+the search fails.
+
+With beam search:
+
+```text
+Root
+├── A → Wrong
+├── B → Correct ✅
+└── C → Possible
+```
+
+the system has alternatives.
+
+---
+
+# 4. Category 4 — LLM Wiki Architecture & Knowledge Engines
+
+# Q7: What is an LLM Wiki Architecture?
+
+### 💡 Answer
+
+An **LLM Wiki** is a structured, human-readable knowledge system where information is stored as interconnected documents rather than only as vectors.
+
+Example:
 
 ```text
 my-knowledge-wiki/
+│
+├── index.md
+│
 ├── entities/
-│   ├── [[Vector_RAG.md]]
-│   ├── [[vLLM.md]]
-│   └── [[PagedAttention.md]]
+│   ├── Vector_RAG.md
+│   ├── Qdrant.md
+│   └── vLLM.md
+│
 ├── concepts/
-│   └── [[Inference_Engines.md]]
-└── index.md
+│   ├── RAG.md
+│   ├── Embeddings.md
+│   └── Inference.md
+│
+└── systems/
+    └── Production_RAG.md
 ```
 
-### Key Principles:
-1. **Bi-Directional Wiki Links (`[[topic]]`):** Links related entities together explicitly, allowing agents to navigate complex knowledge webs without vector databases.
-2. **Human & Machine Readable:** Unlike opaque vector stores, human engineers can open, inspect, edit, and audit markdown wiki files directly.
+A document could contain links such as:
+
+```markdown
+# Vector RAG
+
+Vector RAG uses [[Embeddings]] to retrieve
+information from a [[Qdrant]] vector database.
+
+See also:
+- [[Hybrid RAG]]
+- [[Reranking]]
+- [[Production RAG]]
+```
+
+### Key Benefits
+
+**1. Human readable**
+
+Developers can directly inspect Markdown files.
+
+**2. Machine readable**
+
+Agents can parse the same structure.
+
+**3. Explicit relationships**
+
+Links such as:
+
+```text
+RAG → Embeddings
+RAG → Qdrant
+RAG → Reranking
+```
+
+create a knowledge graph-like structure.
+
+**4. Easy to version**
+
+The wiki can live inside Git.
+
+```text
+Edit
+ ↓
+Git Commit
+ ↓
+Review
+ ↓
+Agent Knowledge Updated
+```
+
+### 🎯 Important Interview Point
+
+The major idea is **explicit, navigable knowledge representation**, rather than relying entirely on opaque vector similarity.
 
 ---
 
-## Q8: Compare Vector RAG vs Vectorless RAG vs Hybrid RAG in an Enterprise Decision Matrix.
+# Q8: Compare Vector RAG vs Vectorless RAG vs Hybrid RAG.
 
-### 💡 Answer:
+### 💡 Answer
 
-| Feature | Vector RAG | Vectorless RAG | Hybrid RAG (Production Ideal) |
-| :--- | :--- | :--- | :--- |
-| **Search Basis** | Vector Cosine Similarity. | Document Structural Tree Traversal. | Combine Vector Search + Tree Traversal + Keyword BM25. |
-| **Setup Complexity** | Low (Chunk & Embed). | Medium (Parse AST / Header Trees). | High (Multi-Index Orchestration). |
-| **Global Document Comprehension** | Poor. | Excellent. | Excellent. |
-| **Factual Precision** | Medium. | High. | Extremely High. |
+| Feature                       | Vector RAG             | Vectorless RAG       | Hybrid RAG         |
+| ----------------------------- | ---------------------- | -------------------- | ------------------ |
+| **Vector Search**             | ✅                      | ❌                    | ✅                  |
+| **Tree Navigation**           | ❌                      | ✅                    | ✅                  |
+| **BM25/Keyword Search**       | Optional               | Optional             | ✅                  |
+| **Document Structure**        | Often flattened        | Preserved            | Preserved          |
+| **Global Understanding**      | Medium/Low             | High                 | High               |
+| **Implementation Complexity** | Low                    | Medium               | High               |
+| **Best For**                  | Unstructured knowledge | Structured documents | Enterprise systems |
+
+### Production Architecture
+
+A sophisticated system may combine all three:
+
+```text
+                 User Query
+                     │
+          ┌──────────┼──────────┐
+          ▼          ▼          ▼
+      Vector       BM25       Tree
+      Search      Search     Search
+          │          │          │
+          └──────────┼──────────┘
+                     ▼
+                Fusion/Rerank
+                     │
+                     ▼
+                    LLM
+```
+
+This gives the system multiple ways to find relevant information.
 
 ---
 
 # 5. Category 5 — Practical Node.js & Tree Search Implementations
 
-## Q9: Write a Node.js implementation of a Document Tree Builder parsing Markdown Headings.
+# Q9: Write a Node.js implementation of a Document Tree Builder parsing Markdown headings.
 
-### 💡 Answer:
+### 💡 Answer
 
 ```javascript
 function buildDocumentTree(markdownText) {
   const lines = markdownText.split("\n");
-  const root = { id: "root", title: "Root Document", level: 0, children: [], content: "" };
+
+  const root = {
+    id: "root",
+    title: "Root Document",
+    level: 0,
+    content: "",
+    children: [],
+  };
+
   const stack = [root];
 
   lines.forEach((line, index) => {
-    const headingMatch = line.match(/^(#{1,6})\s+(.+)/);
+    const headingMatch = line.match(/^(#{1,6})\s+(.+)$/);
+
     if (headingMatch) {
       const level = headingMatch[1].length;
       const title = headingMatch[2].trim();
-      const node = { id: `node_${index}`, title, level, children: [], content: "" };
 
-      while (stack.length > 0 && stack[stack.length - 1].level >= level) {
+      const node = {
+        id: `node_${index}`,
+        title,
+        level,
+        content: "",
+        children: [],
+      };
+
+      // Find the correct parent
+      while (
+        stack.length > 0 &&
+        stack[stack.length - 1].level >= level
+      ) {
         stack.pop();
       }
 
-      stack[stack.length - 1].children.push(node);
+      const parent = stack[stack.length - 1];
+
+      parent.children.push(node);
       stack.push(node);
-    } else if (stack.length > 0) {
+    } else {
+      // Add normal text to the current section
       stack[stack.length - 1].content += line + "\n";
     }
   });
@@ -173,40 +614,371 @@ function buildDocumentTree(markdownText) {
   return root;
 }
 
-// Execution Demo
-const sampleMarkdown = `# Chapter 1: Introduction\nThis is overview.\n## Section 1.1: Architecture\nSystem design details.`;
-console.log("Parsed Tree:", JSON.stringify(buildDocumentTree(sampleMarkdown), null, 2));
+// Example
+const markdown = `
+# Chapter 1: Introduction
+This is the introduction.
+
+## Section 1.1: Architecture
+The system uses a microservice architecture.
+
+## Section 1.2: Storage
+The system uses PostgreSQL.
+
+# Chapter 2: Security
+Security information goes here.
+`;
+
+const tree = buildDocumentTree(markdown);
+
+console.log(JSON.stringify(tree, null, 2));
+```
+
+### How it works
+
+The important data structure is:
+
+```javascript
+const stack = [root];
+```
+
+When a heading appears:
+
+```text
+#       → Level 1
+##      → Level 2
+###     → Level 3
+```
+
+The algorithm compares heading levels and adjusts the stack.
+
+For example:
+
+```text
+# Chapter 1
+    ↓
+## Architecture
+    ↓
+### Database
+```
+
+creates:
+
+```text
+Chapter 1
+└── Architecture
+    └── Database
 ```
 
 ---
 
-## Q10: Write a Node.js implementation of an Agentic Tree Search Engine.
+# Q10: Write a Node.js implementation of an Agentic Tree Search Engine.
 
-### 💡 Answer:
+### 💡 Answer
 
 ```javascript
 import { ChatOpenAI } from "@langchain/openai";
 
-async function agenticTreeSearch(treeNode, userQuery) {
-  const model = new ChatOpenAI({ modelName: "gpt-4o-mini", temperature: 0 });
+const model = new ChatOpenAI({
+  modelName: "gpt-4o-mini",
+  temperature: 0,
+});
 
-  // Base Case: If node has no children (Leaf Node), return its content
+async function agenticTreeSearch(treeNode, userQuery) {
+  // Base case: leaf node
   if (!treeNode.children || treeNode.children.length === 0) {
-    console.log(`[Tree Search] Reached Leaf Node: "${treeNode.title}"`);
+    console.log(
+      `[Tree Search] Reached Leaf: "${treeNode.title}"`
+    );
+
     return treeNode.content;
   }
 
-  // 1. Present child node options to LLM Agent
-  const choices = treeNode.children.map((child, index) => `${index + 1}. ${child.title}`).join("\n");
-  const prompt = `User Question: "${userQuery}"\n\nWhich section is most likely to contain the answer?\n${choices}\n\nReturn ONLY the index number of the best section.`;
+  // Present available branches to the LLM
+  const choices = treeNode.children
+    .map(
+      (child, index) =>
+        `${index + 1}. ${child.title}`
+    )
+    .join("\n");
+
+  const prompt = `
+User Question:
+${userQuery}
+
+Current Node:
+${treeNode.title}
+
+Available Sections:
+${choices}
+
+Which section is most likely to contain the answer?
+
+Return ONLY the index number.
+`;
 
   const response = await model.invoke(prompt);
-  const selectedIndex = parseInt(response.content.trim()) - 1;
 
-  const selectedChild = treeNode.children[selectedIndex] || treeNode.children[0];
-  console.log(`[Tree Search] Navigating into: "${selectedChild.title}"`);
+  let selectedIndex =
+    parseInt(response.content.trim(), 10) - 1;
 
-  // 2. Recurse down the selected branch
-  return await agenticTreeSearch(selectedChild, userQuery);
+  // Safety check
+  if (
+    Number.isNaN(selectedIndex) ||
+    selectedIndex < 0 ||
+    selectedIndex >= treeNode.children.length
+  ) {
+    selectedIndex = 0;
+  }
+
+  const selectedChild =
+    treeNode.children[selectedIndex];
+
+  console.log(
+    `[Tree Search] Navigating → "${selectedChild.title}"`
+  );
+
+  // Continue recursively
+  return agenticTreeSearch(
+    selectedChild,
+    userQuery
+  );
 }
 ```
+
+### Execution
+
+```javascript
+const answer = await agenticTreeSearch(
+  documentTree,
+  "How does the system handle encryption?"
+);
+
+console.log("Retrieved Content:", answer);
+```
+
+### Architecture
+
+```text
+                    User Query
+                        │
+                        ▼
+                 ┌─────────────┐
+                 │ Root Node   │
+                 └──────┬──────┘
+                        │
+                 LLM chooses branch
+                        │
+          ┌─────────────┼─────────────┐
+          ▼             ▼             ▼
+       Chapter A     Chapter B     Chapter C
+                         │
+                  LLM chooses branch
+                         │
+                         ▼
+                     Section B2
+                         │
+                         ▼
+                    Leaf Content
+                         │
+                         ▼
+                       LLM
+                         │
+                         ▼
+                     Answer
+```
+
+---
+
+# 🧠 Bonus Interview Questions
+
+## Q11: Is Vectorless RAG always better than Vector RAG?
+
+### 💡 Answer
+
+**No.**
+
+Vectorless RAG works particularly well when document structure is meaningful.
+
+For example:
+
+```text
+Legal Documents
+Technical Documentation
+Books
+Research Reports
+Financial Reports
+Company Policies
+```
+
+But if you have millions of independent documents such as:
+
+```text
+Emails
+Chat messages
+Short support tickets
+Product reviews
+```
+
+vector search can be much more practical.
+
+### Best Production Approach
+
+Use the retrieval method that matches the data:
+
+```text
+Structured Documents
+        ↓
+Tree Retrieval
+
+Unstructured Documents
+        ↓
+Vector Retrieval
+
+Mixed Enterprise Data
+        ↓
+Hybrid Retrieval
+```
+
+---
+
+# Q12: What are the major weaknesses of Agentic Tree Search?
+
+### 💡 Answer
+
+Agentic Tree Search introduces powerful capabilities, but it also has costs.
+
+### 1. LLM Latency
+
+Every navigation decision can require an LLM call.
+
+```text
+Root → LLM
+Section → LLM
+Subsection → LLM
+```
+
+This can increase latency.
+
+### 2. Cost
+
+More LLM calls mean higher inference costs.
+
+### 3. Navigation Errors
+
+The agent may choose the wrong branch:
+
+```text
+Query
+ ↓
+Wrong Branch ❌
+ ↓
+Wrong Content
+```
+
+### 4. Complex Implementation
+
+You need to handle:
+
+* retries
+* invalid selections
+* branch pruning
+* search limits
+* timeouts
+* fallback strategies
+
+---
+
+# Q13: How would you build a production-grade Vectorless/Hybrid RAG system?
+
+### 💡 Answer
+
+A strong production architecture could look like this:
+
+```text
+                    User Query
+                        │
+                        ▼
+                 Input Guardrails
+                        │
+                        ▼
+                Query Transformation
+                        │
+              ┌─────────┼─────────┐
+              ▼         ▼         ▼
+           Vector      BM25      Tree
+           Search     Search    Search
+              │         │         │
+              └─────────┼─────────┘
+                        ▼
+                  Result Fusion
+                        │
+                        ▼
+                     Reranker
+                        │
+                        ▼
+                  Context Filter
+                        │
+                        ▼
+                   CRAG Check
+                  ┌─────┴─────┐
+                  ▼           ▼
+               Correct      Incorrect
+                  │           │
+                  │       Fallback
+                  │           │
+                  └─────┬─────┘
+                        ▼
+                       LLM
+                        │
+                        ▼
+                Output Guardrails
+                        │
+                        ▼
+                    Response
+```
+
+### Key principle
+
+Don't think of RAG as:
+
+```text
+Embedding → Search → LLM
+```
+
+Modern production RAG is better understood as:
+
+```text
+Query Understanding
+        ↓
+Retrieval Strategy
+        ↓
+Multiple Retrieval Sources
+        ↓
+Fusion / Reranking
+        ↓
+Evaluation
+        ↓
+Generation
+        ↓
+Validation
+```
+
+---
+
+# 🔥 Quick Interview Revision
+
+| Question                       | One-Line Answer                                                                |
+| ------------------------------ | ------------------------------------------------------------------------------ |
+| **Vectorless RAG?**            | Retrieves through document structure rather than primarily through embeddings. |
+| **Abrupt chunking?**           | Flat chunking can destroy headers, tables, and global context.                 |
+| **Tree indexing?**             | Converts documents into hierarchical parent-child nodes.                       |
+| **Top-down search?**           | Navigate Root → Section → Leaf for targeted questions.                         |
+| **Bottom-up aggregation?**     | Leaf → Section → Chapter → Root for global synthesis.                          |
+| **Agentic search?**            | LLM decides which tree branch to explore.                                      |
+| **Branch pruning?**            | Removes irrelevant branches early to reduce computation.                       |
+| **Beam search?**               | Keeps multiple promising search paths simultaneously.                          |
+| **LLM Wiki?**                  | Human/machine-readable interconnected knowledge stored in structured files.    |
+| **Hybrid RAG?**                | Combines vector, keyword, tree, and reranking techniques.                      |
+| **Main Agentic RAG weakness?** | Higher latency, cost, and navigation-error risk.                               |
+| **Production goal?**           | Retrieve the right information using the cheapest reliable strategy.           |

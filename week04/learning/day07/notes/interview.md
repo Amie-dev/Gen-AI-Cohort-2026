@@ -1,6 +1,6 @@
 # 🎯 Week 04 — Day 07 Interview Questions & Deep Dive Answers
 
-# Topic: Agent Application-Level Memory Systems & High-Performance LLM Inference (vLLM)
+**Topic:** Agent Application-Level Memory Systems & High-Performance LLM Inference (vLLM)
 
 > **Target Audience:** Principal AI Engineers, Agent System Architects, and LLM Infrastructure Performance Engineers.
 
@@ -8,11 +8,11 @@
 
 ## 📑 Table of Contents
 
-1. [Category 1 — Application-Level Memory & Context Limitations](#1-category-1--application-level-memory--context-limitations)
-2. [Category 2 — Long-Term Memory (LTM) & RAG Integration](#2-category-2--long-term-memory-ltm--rag-integration)
-3. [Category 3 — Memory Maintenance, Eviction & Dreaming](#3-category-3--memory-maintenance-eviction--dreaming)
-4. [Category 4 — LLM Hardware & Inference Engines (vLLM)](#4-category-4--llm-hardware--inference-engines-vllm)
-5. [Category 5 — Practical Node.js & Memory Code Implementations](#5-category-5--practical-nodejs--memory-code-implementations)
+1. Category 1 — Application-Level Memory & Context Limitations
+2. Category 2 — Long-Term Memory (LTM) & RAG Integration
+3. Category 3 — Memory Maintenance, Eviction & Dreaming
+4. Category 4 — LLM Hardware & Inference Engines (vLLM)
+5. Category 5 — Practical Node.js & Memory Implementations
 
 ---
 
@@ -20,138 +20,780 @@
 
 ## Q1: Why are LLMs stateless HTTP APIs, and why does naive chat history appending fail in production?
 
-### 💡 Answer:
-LLM providers serve models over stateless REST APIs (`POST /chat/completions`). Every request is evaluated in complete isolation; the LLM holds zero internal memory of past HTTP requests.
+### 💡 Answer
 
-### 💥 Production Failures of Naive History Appending:
-1. **Context Window Exhaustion:** Multi-turn dialog eventually overflows token bounds.
-2. **Network Bandwidth & Latency Spikes:** Transmitting megabytes of static past tokens on every user click introduces payload bloat.
-3. **Escalating Financial Costs:** API providers bill per token. Re-sending unchanged historical tokens on every turn leads to exponential cost growth.
-4. **Attention Degradation:** Large context windows suffer from "lost in the middle" attention degradation where the model misses instructions buried in long histories.
+Most hosted LLM APIs are **stateless from the application's perspective**.
+
+When the application sends:
+
+```text
+POST /chat
+```
+
+the server processes the request using the information provided in that request. Unless a provider explicitly offers a separate persistent conversation/state feature, the application should not assume the model remembers previous requests.
+
+Therefore, applications implement memory themselves.
+
+### Naive approach
+
+```text
+User → Message 1
+          ↓
+      LLM Request
+
+User → Message 2
+          ↓
+Message 1 + Message 2
+          ↓
+      LLM Request
+
+User → Message 3
+          ↓
+Message 1 + Message 2 + Message 3
+          ↓
+      LLM Request
+```
+
+This appears simple but creates several production problems.
+
+### 💥 Major Problems
+
+**1. Context Window Exhaustion**
+
+The conversation continuously grows:
+
+```text
+Turn 1
+Turn 2
+Turn 3
+...
+Turn 100
+```
+
+Eventually the prompt can exceed the model's context limit.
+
+**2. Increasing Latency**
+
+More tokens must be transmitted and processed on every request.
+
+**3. Increasing Cost**
+
+For token-priced APIs, repeatedly sending old messages increases input-token consumption.
+
+**4. Attention Degradation**
+
+Extremely long contexts can make important information harder for the model to use effectively.
+
+### 🎯 Production Solution
+
+Instead of blindly storing everything in the prompt:
+
+```text
+                Conversation
+                     │
+        ┌────────────┼────────────┐
+        ▼            ▼            ▼
+       STM          LTM         Summary
+    Recent turns    Facts      Old history
+        │            │            │
+        └────────────┼────────────┘
+                     ▼
+                Final Context
+                     │
+                     ▼
+                    LLM
+```
 
 ---
 
-## Q2: What is Short-Term Memory (STM) and what is its fundamental flaw when used alone?
+# Q2: What is Short-Term Memory (STM), and what is its fundamental flaw?
 
-### 💡 Answer:
-* **Short-Term Memory (STM):** Maintains immediate conversational context using a sliding window buffer of the latest $N$ messages (e.g., last 10–20 turns) stored in a database (PostgreSQL/Redis).
-* **Fundamental Flaw:** Information Amnesia. Once a persistent fact (e.g. user dietary restrictions, name, or account preferences mentioned in Turn 1) slides out of the $N$-message window, the agent forgets it entirely.
+### 💡 Answer
+
+**Short-Term Memory (STM)** stores the most recent conversation turns so the agent can maintain immediate conversational context.
+
+For example:
+
+```text
+Maximum messages = 10
+
+[Message 11]
+[Message 12]
+...
+[Message 20]
+```
+
+When Message 21 arrives:
+
+```text
+Message 11 → Evicted
+Message 12 → Retained
+...
+Message 21 → Added
+```
+
+### Example
+
+User:
+
+> "I'm building an application with React Native."
+
+Several turns later:
+
+> "How should I structure the API?"
+
+STM can preserve the recent discussion.
+
+### ❌ Fundamental Problem
+
+STM alone causes **long-term amnesia**.
+
+Suppose the user said:
+
+```text
+Turn 1:
+"My preferred language is TypeScript."
+```
+
+After hundreds of messages:
+
+```text
+Turn 1 → Removed from STM
+```
+
+The agent no longer has that information.
+
+### 🎯 Solution
+
+Combine:
+
+```text
+STM = Recent conversation
+LTM = Persistent knowledge
+```
 
 ---
 
-# 2. Category 2 — Long-Term Memory (LTM) & RAG Integration
+# 2. Category 2 — Long-Term Memory & RAG Integration
 
-## Q3: Compare Semantic Memory (Facts), Episodic Memory (Events), and Graph Memory (Neo4j).
+# Q3: Compare Semantic, Episodic, and Graph Memory.
 
-### 💡 Answer:
+### 💡 Answer
 
-| Memory Type | Definition | Storage Structure | Use Case |
-| :--- | :--- | :--- | :--- |
-| **Semantic Memory (Facts)** | Key user profile traits, preferences, and facts. | Key-Value pairs with Vector Embeddings. | Storing user name, dietary restrictions, preferred programming language. |
-| **Episodic Memory (Events)** | Sequential time-series log of past user activities and experiences. | Append-only event log with timestamp metadata + Vector index. | Recalling past project decisions, order history, multi-session workflows. |
-| **Graph Memory (Knowledge Graph)** | Structured entity-relationship graphs. | Graph Database (e.g. **Neo4j**). | Multi-hop reasoning ("Sarah works with Bob who manages Project X"). |
+Modern agents can maintain several types of long-term memory.
+
+| Memory Type         | What It Stores   | Typical Storage         | Example                            |
+| ------------------- | ---------------- | ----------------------- | ---------------------------------- |
+| **Semantic Memory** | Persistent facts | DB / Vector DB          | User prefers TypeScript            |
+| **Episodic Memory** | Past events      | Event store + Vector DB | User previously deployed project X |
+| **Graph Memory**    | Relationships    | Neo4j / Graph DB        | Alice → works on → Project X       |
 
 ---
 
-## Q4: How does Fact Extraction work during user interactions, and how is LTM integrated via Vector RAG?
+## 🧠 Semantic Memory
 
-### 💡 Answer:
-1. **Fact Extraction:** An async background LLM prompt analyzes incoming user queries to extract persistent user traits (*"User lives in Tokyo"*, *"User follows vegan diet"*).
-2. **Indexing:** Extracted facts are embedded and stored in a Vector DB (Qdrant).
-3. **Vector RAG Integration:** When a new query arrives, the system queries the Vector DB for facts semantically relevant to the new prompt, injecting only top-$K$ relevant facts alongside STM sliding window messages:
+Stores relatively stable facts:
 
-$$\text{Final Context Payload} = \text{System Prompt} + \text{Retrieved LTM Facts} + \text{STM Sliding Window} + \text{Query}$$
+```text
+User
+├── Preferred Language → TypeScript
+├── Preferred Framework → React
+└── Experience Level → Intermediate
+```
+
+Useful for personalization.
+
+---
+
+## 📜 Episodic Memory
+
+Stores events:
+
+```text
+2026-08-01
+→ User created Project A
+
+2026-08-05
+→ User deployed Project A
+
+2026-08-10
+→ User decided to migrate Project A
+```
+
+This helps an agent remember **what happened**.
+
+---
+
+## 🕸️ Graph Memory
+
+Represents relationships:
+
+```text
+Aminul
+   │
+   ├── builds → Project A
+   │               │
+   │               └── uses → React Native
+   │
+   └── studies → GenAI
+```
+
+Graph databases are particularly useful for **multi-hop relationship queries**.
+
+---
+
+# Q4: How does Fact Extraction work, and how is LTM integrated using RAG?
+
+### 💡 Answer
+
+The system can extract persistent facts from conversations asynchronously.
+
+### Step 1 — User Interaction
+
+```text
+User:
+"I prefer TypeScript for my projects."
+```
+
+### Step 2 — Fact Extraction
+
+An LLM or extraction model identifies:
+
+```json
+{
+  "category": "preference",
+  "key": "programming_language",
+  "value": "TypeScript"
+}
+```
+
+### Step 3 — Store the Memory
+
+The memory can be stored with metadata:
+
+```json
+{
+  "userId": "user_123",
+  "category": "preference",
+  "fact": "User prefers TypeScript",
+  "createdAt": "2026-08-24T10:00:00Z"
+}
+```
+
+It can also be embedded for semantic retrieval.
+
+### Step 4 — New Query
+
+User asks:
+
+> "What stack should I use for my new project?"
+
+The system searches relevant LTM.
+
+```text
+Query
+ ↓
+LTM Retrieval
+ ↓
+"User prefers TypeScript"
+ ↓
+STM
+ ↓
+LLM
+```
+
+### Final Context
+
+Conceptually:
+
+```text
+Final Context =
+System Instructions
++ Relevant LTM
++ Recent STM
++ Current Query
+```
+
+The key principle is:
+
+> **Do not inject every memory into every request. Retrieve only memories relevant to the current task.**
 
 ---
 
 # 3. Category 3 — Memory Maintenance, Eviction & Dreaming
 
-## Q5: What is the "Magic Problem" of Eviction Policies in Long-Term Memory stores?
+# Q5: What is the "Magic Problem" of Eviction Policies in Long-Term Memory?
 
-### 💡 Answer:
-As agents continuously append memories across sessions, memory stores suffer from **data degradation**:
-* **Duplicates:** Storing "User likes JS" multiple times wastes vector index capacity.
-* **Contradictions:** Fact 1 ("User lives in NYC") conflicts with Fact 2 ("User moved to SF").
-* **Stale Items:** Old addresses, temporary preferences, or single-use query facts pollute vector search.
+### 💡 Answer
 
-An **Eviction Policy** determines when to update, replace, or prune memory items to keep context high-precision.
+Long-term memory creates a new problem:
 
----
+> **More memory does not automatically mean better memory.**
 
-## Q6: What is Memory "Dreaming" (Anthropic Claude Reflection Architecture)?
+If the system stores everything forever, the memory database becomes noisy.
 
-### 💡 Answer:
-**Memory Dreaming** is an offline background reflection process inspired by Claude's research preview feature:
+### Major Problems
 
-```mermaid
-flowchart TD
-    RAW_MEM[("🗄️ Raw Memory Store<br/>(Local Incremental Writes)")] --> DREAM["🌙 Memory Dreaming Engine<br/>(Background LLM Reflection)"]
-    TRANSCRIPTS["📜 Session Transcripts & Logs"] --> DREAM
-    
-    subgraph Dreaming Tasks
-        DREAM --> MERGE["1. Merge Duplicate Entries"]
-        DREAM --> RESOLVE["2. Resolve Contradictions<br/>(Retain newest state)"]
-        DREAM --> PRUNE["3. Evict Stale / Zero-Hit Items"]
-    end
-    
-    MERGE & RESOLVE & PRUNE --> CLEANED[("✨ Cleaned Consolidated Memory Store")]
+#### 1. Duplicates
+
+```text
+User likes TypeScript
+User likes TypeScript
+User likes TypeScript
 ```
 
-> **Immutability Principle:** The raw memory store and interaction logs are **never modified**. Dreaming reads raw logs and produces a clean, reorganized candidate store.
+Three memories provide almost no additional value.
+
+#### 2. Contradictions
+
+```text
+Memory A:
+User lives in NYC
+
+Memory B:
+User moved to San Francisco
+```
+
+The system must determine which is current.
+
+#### 3. Stale Information
+
+```text
+Temporary project
+Old preference
+Previous address
+Expired requirement
+```
+
+These may negatively affect future retrieval.
+
+### 🎯 Memory Lifecycle
+
+A production memory system should support:
+
+```text
+Create
+  ↓
+Score
+  ↓
+Retrieve
+  ↓
+Update
+  ↓
+Consolidate
+  ↓
+Expire / Delete
+```
+
+### Useful Memory Signals
+
+A memory can have:
+
+```text
+importance
+recency
+access_count
+confidence
+created_at
+updated_at
+```
+
+A simple conceptual score could be:
+
+```text
+Memory Score =
+Importance × Recency × Relevance
+```
+
+The exact formula depends on the application.
 
 ---
 
-# 4. Category 4 — LLM Hardware & Inference Engines (vLLM)
+# Q6: What is Memory "Dreaming"?
 
-## Q7: Why is LLM Inference memory-bandwidth bound while Training is compute-bound?
+### 💡 Answer
 
-### 💡 Answer:
-* **Training Phase (Compute-Bound):** Backpropagation matrix math processes large static batches in parallel. Compute throughput (TFLOPS) is the bottleneck.
-* **Inference Phase (Memory-Bandwidth Bound):** Output tokens are generated auto-regressively **one token at a time**. For *every single token*, the GPU must move billions of weight parameters and Key-Value (KV) attention caches from High Bandwidth Memory (HBM/VRAM) to local SRAM execution registers.
+**Memory Dreaming** is an offline consolidation process where an agent reviews accumulated memories and reorganizes them into a cleaner long-term representation.
+
+Think of it as:
+
+```text
+Raw Memories
+     ↓
+🌙 Dreaming / Reflection
+     ↓
+Consolidated Memories
+```
+
+### Example
+
+Raw memory:
+
+```text
+User likes JS
+User likes JavaScript
+User prefers TypeScript
+User uses TypeScript
+User moved to SF
+User lives in NYC
+```
+
+A consolidation process could produce:
+
+```text
+Programming:
+→ User prefers TypeScript.
+
+Location:
+→ User currently lives in SF.
+```
+
+### Architecture
+
+```text
+             Raw Memory Store
+                    │
+                    ▼
+             Dreaming Engine
+                    │
+        ┌───────────┼───────────┐
+        ▼           ▼           ▼
+      Merge      Resolve      Prune
+    Duplicates Contradictions  Stale
+        │           │           │
+        └───────────┼───────────┘
+                    ▼
+          Consolidated Memory
+```
+
+### 🔐 Important Principle
+
+A robust design should keep the original event/log history immutable.
+
+```text
+Raw Logs
+   │
+   ├── never modified
+   │
+   ▼
+Dreaming
+   │
+   ▼
+New Memory State
+```
+
+This provides:
+
+* auditability
+* rollback
+* debugging
+* reproducibility
 
 ---
 
-## Q8: Compare Prefill Phase vs Decode Phase in LLM Generation.
+# 4. Category 4 — LLM Hardware & Inference Engines
 
-### 💡 Answer:
-* **Prefill Phase (Prompt Processing):** Processes all incoming prompt tokens simultaneously in parallel. Computes Key and Value attention matrices and writes them to VRAM. (Compute-heavy).
-* **Decode Phase (Token Generation):** Generates output tokens auto-regressively one by one. Requires fetching past KV cache for each generated token. (Memory Bandwidth-bound).
+# Q7: Why is LLM inference often memory-bandwidth bound while training is more compute-intensive?
 
----
+### 💡 Answer
 
-## Q9: What is vLLM, and how does PagedAttention eliminate KV cache memory fragmentation?
+The answer comes from how training and generation operate.
 
-### 💡 Answer:
-**vLLM** is an open-source, high-throughput LLM serving engine developed at UC Berkeley.
+## 🏋️ Training
 
-### 🧠 PagedAttention Breakdown:
-Traditional LLM serving pre-allocates contiguous VRAM for KV caches based on maximum sequence lengths, wasting **60%–80% of VRAM**.
+Training processes large batches and performs substantial matrix operations:
 
-**PagedAttention** applies virtual memory paging from Operating Systems:
-* KV caches are partitioned into small, fixed-size physical memory pages.
-* Pages are allocated dynamically on-demand non-contiguously.
-* Eliminates internal fragmentation, reducing memory waste to **< 4%** and enabling **2x–4x larger batch sizes**.
+```text
+Forward Pass
+     ↓
+Loss
+     ↓
+Backward Pass
+     ↓
+Gradient Update
+```
 
----
+GPUs perform enormous amounts of parallel computation.
 
-## Q10: What are Continuous Batching, Chunked Prefill, and Prefix Caching in vLLM?
-
-### 💡 Answer:
-1. **Continuous Batching:** Schedules requests dynamically at the token iteration level rather than waiting for whole batches to finish generation.
-2. **Chunked Prefill:** Blends long prompt prefill chunks into decode iterations to stabilize GPU latency.
-3. **Prefix Caching:** Caches prefilled KV blocks for system prompts or multi-turn agent instructions. When new requests arrive with identical prompt prefixes, vLLM skips the Prefill phase entirely.
+Therefore, **compute throughput is a major bottleneck**.
 
 ---
 
-# 5. Category 5 — Practical Node.js & Memory Code Implementations
+## ⚡ Inference
 
-## Q11: Write a Node.js implementation of a Short-Term Memory sliding window store.
+During autoregressive generation:
 
-### 💡 Answer:
+```text
+Prompt
+ ↓
+Token 1
+ ↓
+Token 2
+ ↓
+Token 3
+ ↓
+...
+```
+
+The model generates tokens sequentially.
+
+For each decode step, the system repeatedly accesses model weights and the attention KV cache.
+
+Therefore, moving data between memory and compute units can become a major bottleneck.
+
+### 🎯 Interview Summary
+
+```text
+Training
+→ Large parallel matrix computation
+→ Compute-intensive
+
+Decode
+→ Sequential token generation
+→ Heavy memory movement
+→ Often memory-bandwidth constrained
+```
+
+It's more accurate to say **"often memory-bandwidth bound"** rather than claiming all inference is always memory-bound.
+
+---
+
+# Q8: Compare Prefill vs Decode.
+
+### 💡 Answer
+
+LLM inference has two major phases.
+
+## 1. Prefill
+
+The model processes the existing prompt.
+
+```text
+"Explain how RAG works..."
+        ↓
+Token 1
+Token 2
+Token 3
+...
+Token N
+```
+
+These prompt tokens can be processed largely in parallel.
+
+### Characteristics
+
+* Processes input tokens
+* Highly parallel
+* Usually compute-intensive
+* Creates KV cache
+
+---
+
+## 2. Decode
+
+The model generates output tokens one at a time.
+
+```text
+Token N+1
+   ↓
+Token N+2
+   ↓
+Token N+3
+   ↓
+...
+```
+
+Each step depends on the previous output.
+
+### Characteristics
+
+* Sequential
+* KV cache grows
+* Memory bandwidth becomes important
+* Latency per generated token matters
+
+### Visual
+
+```text
+          LLM Inference
+               │
+       ┌───────┴────────┐
+       ▼                ▼
+   PREFILL            DECODE
+       │                │
+ Prompt processing   Token generation
+       │                │
+ Parallel           Sequential
+       │                │
+ Compute-heavy      Memory-sensitive
+```
+
+---
+
+# Q9: What is vLLM, and how does PagedAttention improve KV-cache management?
+
+### 💡 Answer
+
+**vLLM** is a high-performance open-source inference and serving engine for LLMs.
+
+One of its important ideas is **PagedAttention**, which manages KV cache memory using a paging strategy inspired by virtual memory systems.
+
+### The KV Cache Problem
+
+During generation, the model stores attention keys and values:
+
+```text
+KV Cache
+├── Layer 1
+├── Layer 2
+├── Layer 3
+└── ...
+```
+
+With many concurrent requests, KV cache can consume substantial GPU memory.
+
+A naive memory-management strategy may allocate memory inefficiently because sequences have different lengths and grow dynamically.
+
+---
+
+## 🧠 PagedAttention
+
+Instead of requiring each sequence's KV cache to occupy one large contiguous region, memory is divided into blocks/pages.
+
+```text
+Virtual Sequence
+
+Request A:
+[Block 1] [Block 2] [Block 3]
+
+Request B:
+[Block 4] [Block 5]
+
+Request C:
+[Block 6] [Block 7] [Block 8]
+```
+
+The blocks can be physically placed wherever GPU memory is available.
+
+### Benefits
+
+* Better memory utilization
+* Less fragmentation
+* More concurrent requests
+* Higher serving throughput
+
+### 🎯 Important Correction
+
+Avoid memorizing claims such as:
+
+> "PagedAttention always reduces memory waste to exactly <4%."
+
+The actual efficiency depends on workload, configuration, model, and serving implementation.
+
+The interview-safe answer is:
+
+> **PagedAttention improves KV-cache memory utilization by allocating cache in fixed-size blocks rather than requiring large contiguous allocations.**
+
+---
+
+# Q10: What are Continuous Batching, Chunked Prefill, and Prefix Caching?
+
+### 💡 Answer
+
+These are important optimization techniques in modern LLM serving.
+
+---
+
+## 1. Continuous Batching
+
+Traditional batching might wait for an entire batch:
+
+```text
+Request A ────────────────┐
+Request B ────────────────┤
+Request C ────────────────┘
+                           ↓
+                         Finish
+```
+
+Continuous batching dynamically adds/removes requests during generation.
+
+```text
+Step 1 → A B C
+Step 2 → A B C D
+Step 3 → A C D
+Step 4 → C D E
+```
+
+This keeps the GPU better utilized.
+
+---
+
+## 2. Chunked Prefill
+
+Very long prompts can monopolize GPU processing.
+
+Chunked prefill breaks large prefills into smaller pieces:
+
+```text
+Large Prompt
+     ↓
+Chunk 1
+     ↓
+Chunk 2
+     ↓
+Chunk 3
+```
+
+This allows prompt processing to coexist more effectively with ongoing decode workloads.
+
+---
+
+## 3. Prefix Caching
+
+Many requests share the same prefix.
+
+For example:
+
+```text
+System Prompt
++ Tool Instructions
++ User Query A
+```
+
+and:
+
+```text
+System Prompt
++ Tool Instructions
++ User Query B
+```
+
+The shared prefix can potentially be reused.
+
+```text
+Shared Prefix
+     ↓
+Cached KV Blocks
+     │
+ ┌───┴────┐
+ ▼        ▼
+Query A  Query B
+```
+
+This can reduce repeated computation for common prefixes.
+
+---
+
+# 5. Category 5 — Practical Node.js & Memory Implementations
+
+# Q11: Write a Node.js implementation of a Short-Term Memory sliding window store.
+
+### 💡 Answer
 
 ```javascript
 export class ShortTermMemoryStore {
-  constructor(maxMessages = 5) {
+  constructor(maxMessages = 10) {
     this.maxMessages = maxMessages;
     this.sessions = new Map();
   }
@@ -160,50 +802,326 @@ export class ShortTermMemoryStore {
     if (!this.sessions.has(sessionId)) {
       this.sessions.set(sessionId, []);
     }
-    this.sessions.get(sessionId).push({ role, content, timestamp: new Date().toISOString() });
+
+    const history = this.sessions.get(sessionId);
+
+    history.push({
+      role,
+      content,
+      timestamp: new Date().toISOString(),
+    });
+
+    // Keep only the latest N messages
+    if (history.length > this.maxMessages) {
+      history.splice(
+        0,
+        history.length - this.maxMessages
+      );
+    }
   }
 
   async getRecentContext(sessionId) {
-    const history = this.sessions.get(sessionId) || [];
-    return history.slice(-this.maxMessages);
+    return this.sessions.get(sessionId) || [];
+  }
+
+  async clearSession(sessionId) {
+    this.sessions.delete(sessionId);
   }
 }
 ```
 
+### Usage
+
+```javascript
+const memory = new ShortTermMemoryStore(4);
+
+await memory.addMessage(
+  "session-1",
+  "user",
+  "What is RAG?"
+);
+
+await memory.addMessage(
+  "session-1",
+  "assistant",
+  "RAG combines retrieval with generation."
+);
+
+await memory.addMessage(
+  "session-1",
+  "user",
+  "What is Qdrant?"
+);
+
+const context =
+  await memory.getRecentContext("session-1");
+
+console.log(context);
+```
+
+### Production Note
+
+A `Map()` is useful for demonstration, but it is **not a production distributed memory store**.
+
+For production you might use:
+
+```text
+Redis
+PostgreSQL
+DynamoDB
+MongoDB
+```
+
+depending on requirements.
+
 ---
 
-## Q12: Write a Node.js implementation of an offline Memory Dreaming process.
+# Q12: Write a Node.js implementation of an offline Memory Dreaming process.
 
-### 💡 Answer:
+### 💡 Answer
+
+A simple implementation can consolidate memories based on a stable category and timestamp.
 
 ```javascript
 export class MemoryDreamer {
   static dreamAndConsolidate(rawFacts) {
-    console.log(`🌙 Starting Memory Dreaming Session...`);
-    const consolidatedMap = new Map();
+    console.log("🌙 Starting Memory Dreaming...");
+
+    const memoryMap = new Map();
 
     for (const item of rawFacts) {
-      const key = item.category || item.fact.toLowerCase().split(" ")[0];
+      const key = item.category;
 
-      if (!consolidatedMap.has(key)) {
-        consolidatedMap.set(key, item);
-      } else {
-        const existing = consolidatedMap.get(key);
-        // Overwrite stale facts with newest timestamp
-        if (new Date(item.createdAt) > new Date(existing.createdAt)) {
-          consolidatedMap.set(key, item);
-        }
+      if (!memoryMap.has(key)) {
+        memoryMap.set(key, item);
+        continue;
+      }
+
+      const existing = memoryMap.get(key);
+
+      const existingTime =
+        new Date(existing.updatedAt || existing.createdAt);
+
+      const newTime =
+        new Date(item.updatedAt || item.createdAt);
+
+      // Keep the newest memory
+      if (newTime > existingTime) {
+        memoryMap.set(key, item);
       }
     }
 
-    return Array.from(consolidatedMap.values());
+    return Array.from(memoryMap.values());
   }
 }
-
-// Execution Demo
-const rawMemory = [
-  { id: "1", category: "location", fact: "User lives in NYC", createdAt: "2026-01-01T10:00:00Z" },
-  { id: "2", category: "location", fact: "User moved to SF", createdAt: "2026-02-15T12:00:00Z" }
-];
-console.log("Cleaned Store:", MemoryDreamer.dreamAndConsolidate(rawMemory));
 ```
+
+### Example
+
+```javascript
+const rawMemory = [
+  {
+    id: "1",
+    category: "location",
+    fact: "User lives in NYC",
+    createdAt: "2026-01-01T10:00:00Z",
+  },
+  {
+    id: "2",
+    category: "location",
+    fact: "User moved to SF",
+    createdAt: "2026-02-15T12:00:00Z",
+  },
+  {
+    id: "3",
+    category: "language",
+    fact: "User prefers JavaScript",
+    createdAt: "2026-02-20T12:00:00Z",
+  },
+];
+
+const cleanedMemory =
+  MemoryDreamer.dreamAndConsolidate(rawMemory);
+
+console.log(cleanedMemory);
+```
+
+The result keeps the latest memory for each category.
+
+### ⚠️ Production Improvement
+
+This simple implementation has an important limitation:
+
+```text
+category = "location"
+```
+
+doesn't necessarily mean that all location memories should simply be replaced.
+
+A production system should consider:
+
+```text
+Semantic similarity
++
+Timestamp
++
+Confidence
++
+Source
++
+Explicit user correction
++
+Contradiction detection
+```
+
+An LLM-based consolidation process can help determine whether:
+
+```text
+"User lives in NYC"
+
+and
+
+"User moved to SF"
+```
+
+are contradictory updates or unrelated statements.
+
+---
+
+# 🔥 Bonus: Production Agent Memory Architecture
+
+A strong interview answer should be able to combine all these concepts:
+
+```text
+                         USER
+                           │
+                           ▼
+                    Current Query
+                           │
+                  ┌────────┴────────┐
+                  ▼                 ▼
+             STM Retrieval      LTM Retrieval
+                  │                 │
+            Recent Turns       Semantic Facts
+                  │                 │
+                  │            Episodic Events
+                  │                 │
+                  │             Graph Memory
+                  │                 │
+                  └────────┬────────┘
+                           ▼
+                    Context Builder
+                           │
+                           ▼
+                         LLM
+                           │
+                 ┌─────────┴─────────┐
+                 ▼                   ▼
+            Response             Memory
+                                 Extraction
+                                     │
+                                     ▼
+                              Raw Memory Store
+                                     │
+                                     ▼
+                              🌙 Dreaming Job
+                                     │
+                          ┌──────────┼──────────┐
+                          ▼          ▼          ▼
+                        Merge     Resolve     Prune
+                          │          │          │
+                          └──────────┼──────────┘
+                                     ▼
+                              Clean LTM Store
+```
+
+---
+
+# ⚡ Bonus: vLLM Interview Architecture
+
+```text
+                    Client Requests
+                           │
+                           ▼
+                  ┌─────────────────┐
+                  │   vLLM Server   │
+                  └────────┬────────┘
+                           │
+                 ┌─────────┴─────────┐
+                 ▼                   ▼
+              Prefill              Decode
+                 │                   │
+                 ▼                   ▼
+          Prompt Processing    Token Generation
+                 │                   │
+                 └─────────┬─────────┘
+                           ▼
+                    KV Cache Manager
+                           │
+                           ▼
+                   PagedAttention
+                           │
+                           ▼
+                    GPU Memory
+```
+
+The key optimization idea is:
+
+> **Efficient LLM serving is largely about keeping GPU compute busy while managing KV-cache memory and request scheduling efficiently.**
+
+---
+
+# 🧠 Final Interview Revision
+
+| Question                         | One-Line Answer                                                                                           |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| **Why is an LLM API stateless?** | Each request should carry the state needed for generation unless a separate stateful service is provided. |
+| **Why not append all history?**  | Context, latency, cost, and attention problems grow over time.                                            |
+| **STM?**                         | Recent conversational context.                                                                            |
+| **STM weakness?**                | Old but important information eventually disappears.                                                      |
+| **Semantic memory?**             | Persistent facts and preferences.                                                                         |
+| **Episodic memory?**             | Historical events and experiences.                                                                        |
+| **Graph memory?**                | Entities and relationships.                                                                               |
+| **LTM + RAG?**                   | Retrieve only relevant long-term memories for the current query.                                          |
+| **Memory eviction?**             | Removes, replaces, or consolidates low-value/stale memories.                                              |
+| **Memory dreaming?**             | Offline reflection/consolidation of accumulated memories.                                                 |
+| **Training vs inference?**       | Training is highly compute-intensive; decode inference is often memory-bandwidth sensitive.               |
+| **Prefill?**                     | Processes the input prompt.                                                                               |
+| **Decode?**                      | Generates output tokens sequentially.                                                                     |
+| **vLLM?**                        | High-throughput LLM inference and serving engine.                                                         |
+| **PagedAttention?**              | Manages KV cache using block/page-based allocation for better memory utilization.                         |
+| **Continuous batching?**         | Dynamically schedules requests during generation.                                                         |
+| **Chunked prefill?**             | Splits large prompt processing into smaller chunks.                                                       |
+| **Prefix caching?**              | Reuses computation/KV blocks for repeated prompt prefixes.                                                |
+
+## 🎯 The Big Picture
+
+The progression across these topics is:
+
+```text
+Week 02
+Basic Vector RAG
+      ↓
+Week 03
+Advanced / Production RAG
+      ↓
+Week 03 Day 06
+Vectorless + Tree + Agentic Retrieval
+      ↓
+Week 04 Day 07
+Agent Memory + High-Performance Inference
+      ↓
+Production AI Agent
+```
+
+A modern production agent therefore needs **two major capabilities**:
+
+```text
+🧠 MEMORY
+STM + LTM + RAG + Graph + Consolidation
+
+⚡ INFERENCE
+Prefill + Decode + KV Cache + Batching + Efficient Serving
+```
+
+Together, these form the foundation for building **scalable, persistent, high-performance AI agents**.
