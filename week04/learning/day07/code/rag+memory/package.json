@@ -1,0 +1,30 @@
+{
+  "name": "rag-with-memory",
+  "version": "1.0.0",
+  "description": "Production-Grade Advanced RAG with Agent Short-Term & Long-Term Memory System",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js",
+    "dream": "node -e \"import { MemoryReflection } from './src/memory/MemoryReflection.js'; console.log('Running Memory Dreaming offline background job...');\""
+  },
+  "keywords": [
+    "rag",
+    "vector-search",
+    "memory",
+    "short-term-memory",
+    "long-term-memory",
+    "crag",
+    "rrf",
+    "hyde",
+    "llm-agent"
+  ],
+  "author": "GenAI Cohort",
+  "license": "ISC",
+  "dependencies": {
+    "@google/genai": "^0.13.0",
+    "dotenv": "^16.4.7",
+    "openai": "^4.52.7"
+  }
+}
