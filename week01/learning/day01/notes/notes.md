@@ -2,6 +2,8 @@
 
 # Introduction to Generative AI, LLMs, and Transformers
 
+> 💡 **Interview Prep:** Check out the complete Q&A guide at **[interview.md](file:///home/aminul/development/gen-ai-cohort/week01/learning/day01/notes/interview.md)**
+
 ---
 
 # Class Overview
