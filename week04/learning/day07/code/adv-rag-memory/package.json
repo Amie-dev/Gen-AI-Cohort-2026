@@ -1,0 +1,31 @@
+{
+  "name": "adv-rag-memory",
+  "version": "1.0.0",
+  "description": "Production Advanced RAG + Mem0 Long-Term Memory Architecture",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/api/server.js",
+    "cli": "node index.js",
+    "dev": "node --watch index.js",
+    "worker": "node -e \"import { runMemoryWorkerPass } from './src/memory/memoryWorker.js'; runMemoryWorkerPass();\""
+  },
+  "keywords": [
+    "adv-rag",
+    "mem0",
+    "rag",
+    "memory",
+    "vllm",
+    "rrf",
+    "crag",
+    "hyde"
+  ],
+  "author": "GenAI Cohort",
+  "license": "ISC",
+  "dependencies": {
+    "@google/genai": "^0.13.0",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "openai": "^4.52.7"
+  }
+}
