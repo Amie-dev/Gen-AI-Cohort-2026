@@ -27,5 +27,8 @@
   "bugs": {
     "url": "https://github.com/Amie-dev/Gen-AI-Cohort-2026/issues"
   },
-  "homepage": "https://github.com/Amie-dev/Gen-AI-Cohort-2026#readme"
+  "homepage": "https://github.com/Amie-dev/Gen-AI-Cohort-2026#readme",
+  "devDependencies": {
+    "typescript": "^7.0.2"
+  }
 }
