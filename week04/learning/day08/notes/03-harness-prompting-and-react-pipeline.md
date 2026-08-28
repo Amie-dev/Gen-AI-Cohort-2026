@@ -1,115 +1,1048 @@
 # 🎯 03 — Harness Prompting & ReAct Pipeline
 
-## 1. What is a Harness Prompt?
-
-A **Harness Prompt** is a meta-system prompt injected by the Agent SDK around the user's custom instructions. Its primary function is to enforce a **deterministic reasoning pipeline** and strict **JSON output formats** on the underlying LLM.
-
-Without a harness prompt, LLMs will emit conversational Markdown text, conversational tool explanations, or inconsistent function call structures that break automated parsing.
+> **Goal:** Understand how the **Harness Prompt controls the LLM**, how the LLM communicates with the **Agent Runtime**, and how the **ReAct-style loop** connects **reasoning → tools → analysis → final output**.
 
 ---
 
-## 2. The 5-Stage Harness Pipeline
+# 1. 🧠 What is a Harness Prompt?
 
-The Agent SDK enforces a structured state machine with 5 distinct reasoning steps:
+A **Harness Prompt** is a special instruction layer added by the Agent SDK to control how the LLM behaves.
 
-```
-+----------+     +----------+     +--------------+     +------------+     +------------+
-| INITIAL  | --> |  THINK   | --> | TOOL_REQUEST | --> |  ANALYSE   | --> |   OUTPUT   |
-| (Intent) |     | (Decomp) |     | (Invocation) |     | (Evaluate) |     | (Final Ans)|
-+----------+     +----------+     +--------------+     +------------+     +------------+
-     ^                                                          |
-     +---------------------- Iterative Loop --------------------+
+Instead of simply telling the LLM:
+
+```text
+"You are a coding agent."
 ```
 
-1. **`INITIAL`**: Recognize the overall user query and define the primary objective.
-2. **`THINK`**: Break down the task into step-by-step sub-problems (e.g., using chain-of-thought or BODMAS ordering).
-3. **`TOOL_REQUEST`**: Request an external tool execution by specifying `functionName` and `input`.
-4. **`ANALYSE`**: Evaluate tool results or intermediate thoughts to verify correctness.
-5. **`OUTPUT`**: Emit the final response to the user and terminate the execution loop.
+the SDK gives it additional rules:
+
+```text
+HARNESS PROMPT
+      +
+SYSTEM INSTRUCTIONS
+      +
+MESSAGE HISTORY
+      ↓
+     LLM
+```
+
+The Harness tells the LLM:
+
+* 📋 Which execution steps it can use
+* 🛠️ When it should request a tool
+* 📦 What JSON format it must return
+* 🔄 How to continue the execution
+* 🏁 When the task is finished
+
+### Simple idea
+
+> **System Prompt tells the Agent WHAT it is.**
+
+> **Harness Prompt tells the Agent HOW to behave during execution.**
 
 ---
 
-## 3. Harness Prompt System Template
+# 2. 🏗️ Where Does the Harness Prompt Connect?
 
-Below is the production harness prompt template used inside the SDK:
+This is the most important connection from your previous `agent.ts`.
 
-```typescript
-export const HARNESS_PROMPT = `
-You are an expert AI assistant system governed by an Agent Harness.
+Inside `Agent`:
 
-You must analyze user input carefully and break down complex problems step-by-step before arriving at the final output.
+```ts
+this.instructions = `
+    ${HARNESS_PROMPT}
 
-Execution Pipeline Stages:
-- INITIAL: Identify user intent and state high-level goal.
-- THINK: Deconstruct the problem into logical sub-tasks.
-- TOOL_REQUEST: Request tool execution. Format: { "step": "TOOL_REQUEST", "functionName": "<name>", "input": "<arg>" }
-- ANALYSE: Inspect tool output or step results to verify accuracy.
-- OUTPUT: Emit the final answer to the user. This terminates execution.
+    System Prompt:
+    ${builder.instructions}
 
-STRICT JSON OUTPUT FORMAT:
-Every output MUST be a valid, parseable JSON object adhering to this schema:
-{
-  "step": "INITIAL" | "THINK" | "TOOL_REQUEST" | "ANALYSE" | "OUTPUT",
-  "text": "<reasoning text>",
-  "functionName": "<optional tool name>",
-  "input": "<optional tool arguments string or object>"
-}
-
-Rules:
-1. Output ONLY ONE JSON object per step.
-2. Do NOT wrap output in markdown fences (e.g., no \`\`\`json ... \`\`\`).
-3. Follow JSON formatting strictly.
+    Available Tools:
+    ${builder.toolList...}
 `;
 ```
 
+So the final instructions sent to the LLM are assembled from multiple pieces.
+
+```mermaid
+flowchart TD
+
+    BUILDER["🏗️ AgentBuilder"]
+
+    USER_INSTRUCTIONS["📜 Developer Instructions<br/>You are a coding agent"]
+
+    HARNESS["🎯 HARNESS_PROMPT<br/>Execution Rules"]
+
+    TOOLS["🛠️ Available Tools<br/>Name + Description + Docs"]
+
+    SYSTEM["🧠 Final System Instructions"]
+
+    HISTORY["💬 Message History"]
+
+    LLM["🤖 LLM"]
+
+    BUILDER --> USER_INSTRUCTIONS
+    BUILDER --> TOOLS
+
+    HARNESS --> SYSTEM
+    USER_INSTRUCTIONS --> SYSTEM
+    TOOLS --> SYSTEM
+
+    SYSTEM --> LLM
+    HISTORY --> LLM
+
+    classDef builder fill:#FFF3E0,stroke:#EF6C00,stroke-width:3px,color:#000
+    classDef harness fill:#F3E5F5,stroke:#7B1FA2,stroke-width:3px,color:#000
+    classDef system fill:#E3F2FD,stroke:#1565C0,stroke-width:3px,color:#000
+    classDef history fill:#E0F7FA,stroke:#00838F,stroke-width:2px,color:#000
+    classDef llm fill:#E8F5E9,stroke:#2E7D32,stroke-width:3px,color:#000
+
+    class BUILDER builder
+    class HARNESS harness
+    class USER_INSTRUCTIONS,TOOLS system
+    class SYSTEM system
+    class HISTORY history
+    class LLM llm
+```
+
 ---
 
-## 4. ReAct Reasoning Walkthrough Example
+# 3. 🧩 The Final Prompt Sent to the LLM
 
-### Task: "What is 2 + 2 - 5 * 10 / 3?"
+Conceptually, the Agent creates:
+
+```text
+┌──────────────────────────────────┐
+│         SYSTEM MESSAGE           │
+│                                  │
+│ 🎯 Harness Prompt                │
+│ 📜 Developer Instructions        │
+│ 🛠️ Available Tools              │
+│                                  │
+└──────────────────────────────────┘
+
+┌──────────────────────────────────┐
+│         MESSAGE HISTORY           │
+│                                  │
+│ 👤 User messages                 │
+│ 🤖 Previous assistant messages   │
+│ 🔧 Tool results                  │
+│                                  │
+└──────────────────────────────────┘
+                  │
+                  ▼
+              🤖 LLM
+```
+
+Therefore:
+
+$$
+\text{LLM Context}
+=
+\text{Harness}
++
+\text{Instructions}
++
+\text{Tools}
++
+\text{History}
+$$
+
+---
+
+# 4. 🎯 Why Do We Need a Harness?
+
+A raw LLM might return:
+
+```text
+Sure! I'll check the weather for you.
+```
+
+That is useful for humans, but difficult for an Agent runtime to execute automatically.
+
+The runtime wants something predictable:
 
 ```json
-// Step 1: LLM returns
+{
+  "step": "TOOL_REQUEST",
+  "functionName": "fetchWeatherInfo",
+  "input": "Tokyo"
+}
+```
+
+Now the Agent can programmatically understand:
+
+```text
+step = TOOL_REQUEST
+        ↓
+find functionName
+        ↓
+find tool
+        ↓
+execute tool
+        ↓
+send result back to LLM
+```
+
+So:
+
+> **Harness Prompt = communication contract between LLM and Agent Runtime.**
+
+---
+
+# 5. 🔄 The 5-Stage Pipeline
+
+Your Harness defines these stages:
+
+```text
+INITIAL
+   ↓
+THINK
+   ↓
+TOOL_REQUEST
+   ↓
+ANALYSE
+   ↓
+OUTPUT
+```
+
+But importantly, **the stages are not necessarily a fixed one-way sequence**.
+
+The Agent can loop:
+
+```text
+THINK
+  ↓
+TOOL_REQUEST
+  ↓
+ANALYSE
+  ↓
+THINK
+  ↓
+TOOL_REQUEST
+  ↓
+ANALYSE
+  ↓
+OUTPUT
+```
+
+That's why this is better understood as a **state-driven execution loop**.
+
+---
+
+# 6. 🗺️ Complete Harness State Machine
+
+```mermaid
+stateDiagram-v2
+
+    [*] --> INITIAL
+
+    INITIAL --> THINK: Understand intent
+
+    THINK --> TOOL_REQUEST: External information/action needed
+    THINK --> ANALYSE: No tool required
+
+    TOOL_REQUEST --> ANALYSE: Tool executed
+
+    ANALYSE --> THINK: More reasoning needed
+    ANALYSE --> TOOL_REQUEST: Another tool needed
+    ANALYSE --> OUTPUT: Task completed
+
+    THINK --> OUTPUT: Can answer directly
+
+    OUTPUT --> [*]
+
+    state "🎯 INITIAL" as INITIAL
+    state "🧠 THINK" as THINK
+    state "🛠️ TOOL_REQUEST" as TOOL_REQUEST
+    state "🔍 ANALYSE" as ANALYSE
+    state "✅ OUTPUT" as OUTPUT
+```
+
+---
+
+# 7. 🎯 Stage 1 — `INITIAL`
+
+The Agent first identifies the user's objective.
+
+Example:
+
+```text
+User:
+"What's the weather in Kolkata?"
+```
+
+LLM might return:
+
+```json
 {
   "step": "INITIAL",
-  "text": "The user wants me to calculate the mathematical expression 2 + 2 - 5 * 10 / 3."
+  "text": "The user wants the current weather in Kolkata."
 }
+```
 
-// Step 2: LLM returns
+The Agent stores this response in:
+
+```ts
+messageHistory
+```
+
+---
+
+# 8. 🧠 Stage 2 — `THINK`
+
+The LLM determines what needs to happen next.
+
+Example:
+
+```json
 {
   "step": "THINK",
-  "text": "According to operator precedence (BODMAS), multiplication and division take priority. First, calculate 5 * 10 = 50."
+  "text": "I need current weather data, so I should use the weather tool."
 }
+```
 
-// Step 3: LLM returns
+The important point is:
+
+```text
+LLM decides
+     ↓
+Does this task require a tool?
+     ↓
+YES
+     ↓
+TOOL_REQUEST
+```
+
+---
+
+# 9. 🛠️ Stage 3 — `TOOL_REQUEST`
+
+Now the LLM requests a specific registered tool.
+
+Example:
+
+```json
 {
-  "step": "ANALYSE",
-  "text": "Expression simplifies to 2 + 2 - 50 / 3."
+  "step": "TOOL_REQUEST",
+  "functionName": "fetchWeatherInfo",
+  "input": "Kolkata"
 }
+```
 
-// Step 4: LLM returns
-{
-  "step": "THINK",
-  "text": "Now compute division 50 / 3 = 16.666667."
-}
+The Agent runtime receives this JSON.
 
-// Step 5: LLM returns
-{
-  "step": "ANALYSE",
-  "text": "Expression simplifies to 2 + 2 - 16.666667 = 4 - 16.666667."
-}
+Then:
 
-// Step 6: LLM returns
+```ts
+const { functionName, input } = parsedResult;
+
+const tool = this.toolMap.get(functionName);
+```
+
+This connects directly to the **Tool Map** created in the previous chapter.
+
+```mermaid
+flowchart LR
+
+    LLM["🤖 LLM"]
+
+    JSON["📦 TOOL_REQUEST<br/>functionName = fetchWeatherInfo"]
+
+    MAP["🗺️ Agent.toolMap"]
+
+    TOOL["🛠️ fetchWeatherInfo"]
+
+    EXEC["⚙️ executor(input)"]
+
+    RESULT["📄 Tool Result"]
+
+    LLM --> JSON
+    JSON --> MAP
+    MAP --> TOOL
+    TOOL --> EXEC
+    EXEC --> RESULT
+
+    classDef llm fill:#E8F5E9,stroke:#2E7D32,stroke-width:3px,color:#000
+    classDef json fill:#FFF3E0,stroke:#EF6C00,stroke-width:2px,color:#000
+    classDef map fill:#E3F2FD,stroke:#1565C0,stroke-width:3px,color:#000
+    classDef tool fill:#F3E5F5,stroke:#7B1FA2,stroke-width:3px,color:#000
+    classDef result fill:#E0F7FA,stroke:#00838F,stroke-width:2px,color:#000
+
+    class LLM llm
+    class JSON json
+    class MAP map
+    class TOOL,EXEC tool
+    class RESULT result
+```
+
+---
+
+# 10. ⚙️ Tool Execution
+
+The Agent finds the tool:
+
+```ts
+const tool = this.toolMap.get(functionName);
+```
+
+Then executes:
+
+```ts
+const toolResult = await tool.executor(input);
+```
+
+For example:
+
+```text
+functionName:
+fetchWeatherInfo
+
+input:
+Kolkata
+```
+
+becomes:
+
+```ts
+weatherTool.executor("Kolkata")
+```
+
+The tool might return:
+
+```json
 {
-  "step": "OUTPUT",
-  "text": "The result of 2 + 2 - 5 * 10 / 3 is -12.666667."
+  "cityName": "Kolkata",
+  "weatherInfo": "28°C, Partly cloudy"
 }
 ```
 
 ---
 
-## 5. Summary Key Takeaways
+# 11. 🔍 Stage 4 — `ANALYSE`
 
-1. **Harness Prompting** converts unpredictable text generation into a **predictable state machine**.
-2. **Structured JSON Output** enables accurate program parsing by the Agent SDK runtime.
-3. The **5-Stage Pipeline (`INITIAL` $\rightarrow$ `THINK` $\rightarrow$ `TOOL_REQUEST` $\rightarrow$ `ANALYSE` $\rightarrow$ `OUTPUT`)** forces deep reasoning and prevents hallucinated actions.
+The tool result is added back into the Agent's message history.
+
+Conceptually:
+
+```text
+👤 User
+   ↓
+🤖 Assistant → TOOL_REQUEST
+   ↓
+🛠️ Tool
+   ↓
+📄 Tool Result
+   ↓
+🧠 Agent History
+   ↓
+🤖 LLM
+```
+
+The LLM can now evaluate the result.
+
+For example:
+
+```json
+{
+  "step": "ANALYSE",
+  "text": "The weather tool reports 28°C and partly cloudy conditions in Kolkata."
+}
+```
+
+If more work is required:
+
+```text
+ANALYSE
+   ↓
+THINK
+   ↓
+TOOL_REQUEST
+```
+
+If everything is complete:
+
+```text
+ANALYSE
+   ↓
+OUTPUT
+```
+
+---
+
+# 12. ✅ Stage 5 — `OUTPUT`
+
+Once the task is complete, the LLM returns:
+
+```json
+{
+  "step": "OUTPUT",
+  "text": "The current weather in Kolkata is 28°C and partly cloudy."
+}
+```
+
+The Agent checks:
+
+```ts
+if (
+    parsedResult.step.toLowerCase() === "output"
+) {
+    return this.messageHistory;
+}
+```
+
+And the loop terminates.
+
+---
+
+# 13. 🔄 Complete Agent ↔ LLM ↔ Tool Loop
+
+This is the most important diagram to remember.
+
+```mermaid
+sequenceDiagram
+    autonumber
+
+    participant U as 👤 User
+    participant A as 🤖 Agent Runtime
+    participant L as 🧠 LLM
+    participant T as 🛠️ Tool
+
+    U->>A: run("What's weather in Kolkata?")
+
+    A->>A: Add user message to history
+
+    A->>L: Harness + Instructions + Tools + History
+
+    L-->>A: INITIAL
+
+    A->>A: Store assistant response
+
+    A->>L: Updated History
+
+    L-->>A: THINK
+
+    A->>A: Store assistant response
+
+    A->>L: Updated History
+
+    L-->>A: TOOL_REQUEST
+
+    A->>A: Find tool in toolMap
+
+    A->>T: executor("Kolkata")
+
+    T-->>A: Weather Result
+
+    A->>A: Add tool result to history
+
+    A->>L: History + Tool Result
+
+    L-->>A: ANALYSE
+
+    A->>A: Store analysis
+
+    A->>L: Updated History
+
+    L-->>A: OUTPUT
+
+    A-->>U: Final Answer
+```
+
+---
+
+# 14. 📦 The JSON Contract
+
+The Harness defines a contract between the LLM and runtime.
+
+The basic structure is:
+
+```json
+{
+  "step": "INITIAL | THINK | TOOL_REQUEST | ANALYSE | OUTPUT",
+  "text": "....",
+  "functionName": "optional",
+  "input": "optional"
+}
+```
+
+Think of it as:
+
+```text
+┌───────────────────────────────┐
+│        LLM → Agent            │
+│                               │
+│  "step"       → What to do    │
+│  "text"       → Explanation   │
+│  "functionName" → Which tool  │
+│  "input"      → Tool input    │
+│                               │
+└───────────────────────────────┘
+```
+
+This makes the LLM output **machine-readable**.
+
+---
+
+# 15. 🧠 Why JSON is Important
+
+Without structured output:
+
+```text
+LLM
+ ↓
+"Okay, let me run the weather function..."
+ ↓
+Agent 😵
+"Which function?"
+"What input?"
+```
+
+With structured output:
+
+```json
+{
+  "step": "TOOL_REQUEST",
+  "functionName": "fetchWeatherInfo",
+  "input": "Kolkata"
+}
+```
+
+The Agent knows exactly what to do.
+
+```text
+step
+ ↓
+TOOL_REQUEST
+ ↓
+functionName
+ ↓
+fetchWeatherInfo
+ ↓
+input
+ ↓
+Kolkata
+```
+
+---
+
+# 16. 🧮 ReAct-Style Example
+
+Consider:
+
+```text
+"What is the weather in Kolkata?"
+```
+
+A simplified execution could be:
+
+```text
+1️⃣ INITIAL
+   ↓
+   Understand the request
+
+2️⃣ THINK
+   ↓
+   Need real-time weather
+
+3️⃣ TOOL_REQUEST
+   ↓
+   fetchWeatherInfo("Kolkata")
+
+4️⃣ ANALYSE
+   ↓
+   Inspect weather result
+
+5️⃣ OUTPUT
+   ↓
+   Tell user the weather
+```
+
+---
+
+# 17. 🔁 ReAct Does NOT Mean "Always Use Tools"
+
+For a simple question:
+
+```text
+"What is 2 + 2?"
+```
+
+The Agent might do:
+
+```text
+INITIAL
+   ↓
+THINK
+   ↓
+ANALYSE
+   ↓
+OUTPUT
+```
+
+No tool is required.
+
+For:
+
+```text
+"What's the weather in Kolkata?"
+```
+
+the flow becomes:
+
+```text
+INITIAL
+   ↓
+THINK
+   ↓
+TOOL_REQUEST
+   ↓
+ANALYSE
+   ↓
+OUTPUT
+```
+
+For a more complex task:
+
+```text
+"Find my project, inspect the package.json,
+install the missing dependency and run the tests."
+```
+
+the loop could be:
+
+```text
+THINK
+ ↓
+TOOL_REQUEST
+ ↓
+ANALYSE
+ ↓
+THINK
+ ↓
+TOOL_REQUEST
+ ↓
+ANALYSE
+ ↓
+THINK
+ ↓
+TOOL_REQUEST
+ ↓
+ANALYSE
+ ↓
+OUTPUT
+```
+
+That's where the Agent runtime becomes powerful.
+
+---
+
+# 18. 🔄 Where `MAX_LOOP` Fits
+
+Your `agent.ts` contains:
+
+```ts
+private MAX_LOOP = 30;
+```
+
+And:
+
+```ts
+for (
+    let i = 0;
+    i < this.MAX_LOOP;
+    i++
+) {
+    ...
+}
+```
+
+This protects the Agent from infinite execution.
+
+```mermaid
+flowchart TD
+
+    START["▶️ Agent.run()"]
+
+    LOOP["🔄 Execution Loop"]
+
+    CHECK{"i < MAX_LOOP?"}
+
+    LLM["🧠 Call LLM"]
+
+    STEP{"What is step?"}
+
+    TOOL["🛠️ Execute Tool"]
+
+    CONTINUE["↩️ Continue Loop"]
+
+    OUTPUT["✅ OUTPUT"]
+
+    STOP["🛑 Stop"]
+
+    START --> LOOP
+    LOOP --> CHECK
+
+    CHECK -->|Yes| LLM
+    CHECK -->|No| STOP
+
+    LLM --> STEP
+
+    STEP -->|TOOL_REQUEST| TOOL
+    TOOL --> CONTINUE
+    CONTINUE --> LOOP
+
+    STEP -->|OUTPUT| OUTPUT
+    OUTPUT --> STOP
+
+    classDef start fill:#E3F2FD,stroke:#1565C0,stroke-width:3px,color:#000
+    classDef loop fill:#FFF3E0,stroke:#EF6C00,stroke-width:3px,color:#000
+    classDef decision fill:#FFF9C4,stroke:#F9A825,stroke-width:3px,color:#000
+    classDef llm fill:#F3E5F5,stroke:#7B1FA2,stroke-width:3px,color:#000
+    classDef tool fill:#E0F7FA,stroke:#00838F,stroke-width:3px,color:#000
+    classDef output fill:#E8F5E9,stroke:#2E7D32,stroke-width:3px,color:#000
+    classDef stop fill:#FCE4EC,stroke:#C2185B,stroke-width:3px,color:#000
+
+    class START start
+    class LOOP,CONTINUE loop
+    class CHECK,STEP decision
+    class LLM llm
+    class TOOL tool
+    class OUTPUT output
+    class STOP stop
+```
+
+So:
+
+> **Harness controls the logical protocol.**
+
+> **MAX_LOOP controls the runtime safety boundary.**
+
+---
+
+# 19. 🧠 Harness vs ReAct vs Agent Runtime
+
+These three concepts should not be confused.
+
+| Component              | Responsibility                 |
+| ---------------------- | ------------------------------ |
+| 🎯 **Harness Prompt**  | Defines the execution protocol |
+| 🧠 **LLM**             | Decides the next step          |
+| 🤖 **Agent Runtime**   | Executes the step              |
+| 🛠️ **Tools**          | Perform external actions       |
+| 🔄 **Loop**            | Repeats execution              |
+| 💬 **Message History** | Maintains context              |
+
+The relationship:
+
+```mermaid
+flowchart LR
+
+    H["🎯 Harness<br/>Defines Rules"]
+
+    L["🧠 LLM<br/>Chooses Step"]
+
+    A["🤖 Agent Runtime<br/>Executes Step"]
+
+    T["🛠️ Tools<br/>Perform Action"]
+
+    S["💬 State<br/>Stores Context"]
+
+    H --> L
+    S --> L
+    L --> A
+    A --> T
+    T --> A
+    A --> S
+    S --> L
+
+    classDef harness fill:#F3E5F5,stroke:#7B1FA2,stroke-width:3px,color:#000
+    classDef llm fill:#E8F5E9,stroke:#2E7D32,stroke-width:3px,color:#000
+    classDef agent fill:#E3F2FD,stroke:#1565C0,stroke-width:3px,color:#000
+    classDef tool fill:#FFF3E0,stroke:#EF6C00,stroke-width:3px,color:#000
+    classDef state fill:#E0F7FA,stroke:#00838F,stroke-width:3px,color:#000
+
+    class H harness
+    class L llm
+    class A agent
+    class T tool
+    class S state
+```
+
+---
+
+# 20. ⚠️ Important Technical Correction
+
+One thing in the original notes should be clarified:
+
+### The Harness does not literally "force deep reasoning."
+
+A prompt can **request** a structured process, but an LLM is still probabilistic.
+
+A better description is:
+
+> **The Harness constrains the LLM's communication protocol by requesting specific states and a machine-readable JSON format.**
+
+Also, `THINK` / `ANALYSE` fields should **not be treated as guaranteed access to the model's private chain-of-thought**. In a production system, these fields are better used for **short, operational summaries or state information** rather than requiring hidden reasoning to be exposed.
+
+---
+
+# 21. 🔗 Connection With Previous Chapters
+
+Now the architecture from **01 → 02 → 03** becomes clear.
+
+### 📚 Chapter 01 — Agent SDK
+
+Introduced:
+
+```text
+Agent
+LLM
+Tools
+State
+Interceptors
+```
+
+### 🏗️ Chapter 02 — Builder Pattern
+
+Explained how we create the Agent:
+
+```text
+Agent.builder()
+      ↓
+configure
+      ↓
+build()
+      ↓
+Agent
+```
+
+### 🎯 Chapter 03 — Harness
+
+Explains how the Agent controls LLM execution:
+
+```text
+Agent
+  ↓
+Harness + Instructions + Tools + History
+  ↓
+LLM
+  ↓
+Structured JSON
+  ↓
+Agent Runtime
+```
+
+Together:
+
+```mermaid
+flowchart TD
+
+    DEV["👨‍💻 Developer"]
+
+    BUILDER["🏗️ AgentBuilder"]
+
+    AGENT["🤖 Agent"]
+
+    HARNESS["🎯 Harness Prompt"]
+
+    TOOLS["🛠️ Tool Registry"]
+
+    STATE["💬 Message History"]
+
+    LLM["🧠 LLM"]
+
+    JSON["📦 Structured JSON"]
+
+    EXEC["⚙️ Agent Execution"]
+
+    DEV --> BUILDER
+    BUILDER --> AGENT
+
+    AGENT --> HARNESS
+    AGENT --> TOOLS
+    AGENT --> STATE
+
+    HARNESS --> LLM
+    TOOLS --> LLM
+    STATE --> LLM
+
+    LLM --> JSON
+    JSON --> EXEC
+
+    EXEC --> TOOLS
+    EXEC --> STATE
+    STATE --> LLM
+
+    classDef dev fill:#E3F2FD,stroke:#1565C0,stroke-width:3px,color:#000
+    classDef builder fill:#FFF3E0,stroke:#EF6C00,stroke-width:3px,color:#000
+    classDef agent fill:#E8F5E9,stroke:#2E7D32,stroke-width:3px,color:#000
+    classDef harness fill:#F3E5F5,stroke:#7B1FA2,stroke-width:3px,color:#000
+    classDef llm fill:#E0F7FA,stroke:#00838F,stroke-width:3px,color:#000
+    classDef json fill:#FFF9C4,stroke:#F9A825,stroke-width:3px,color:#000
+
+    class DEV dev
+    class BUILDER builder
+    class AGENT,EXEC agent
+    class HARNESS harness
+    class TOOLS,STATE harness
+    class LLM llm
+    class JSON json
+```
+
+---
+
+# 🔑 Final Mental Model
+
+Remember this:
+
+```text
+🏗️ BUILDER
+     │
+     │ creates/configures
+     ▼
+🤖 AGENT
+     │
+     ├── 🎯 Harness
+     ├── 📜 Instructions
+     ├── 🛠️ Tools
+     ├── 💬 History
+     └── 🔄 Loop
+     │
+     ▼
+🧠 LLM
+     │
+     │ returns structured decision
+     ▼
+📦 JSON
+     │
+     ▼
+🤖 AGENT RUNTIME
+     │
+     ├── 🛠️ Execute Tool
+     ├── 💬 Update State
+     └── 🔄 Call LLM Again
+     │
+     ▼
+✅ OUTPUT
+```
+
+### ⭐ Core Formula
+
+$$
+\boxed{
+\text{Harness}
++
+\text{LLM}
++
+\text{State}
++
+\text{Tools}
++
+\text{Execution Loop}
+=
+\text{Agent Runtime}
+}
+$$
+
+And the key connection to remember is:
+
+> **The Harness tells the LLM what protocol to follow → the LLM returns a structured action → the Agent Runtime executes that action → the result goes back into state → the LLM continues until `OUTPUT`.**

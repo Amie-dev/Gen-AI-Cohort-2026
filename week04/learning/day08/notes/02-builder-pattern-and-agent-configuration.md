@@ -1,180 +1,1051 @@
+
 # 🏗️ 02 — Builder Pattern & Agent Configuration
 
-## 1. Why Use the Builder Pattern for Agents?
-
-When designing an Agent SDK, configuring an agent involves many optional and mandatory parameters:
-- System instructions
-- Registered tools
-- Interceptors / middleware
-- Model parameters (temperature, max tokens, model name)
-- Loop constraints (`MAX_LOOP`)
-- Memory & context pruning rules
-
-Using a flat constructor leads to messy code or long parameter objects with missing validation:
-
-```typescript
-// BAD: Anti-pattern constructor with positional or cluttered parameters
-const agent = new Agent("You are a helper", [tool1, tool2], "gpt-4o", 30, [logger], true);
-```
-
-The **Builder Pattern** separates object construction from representation, offering:
-1. **Fluent Method Chaining**: Readable, self-documenting syntax.
-2. **Step-by-Step Validation**: Validating inputs prior to instantiation.
-3. **Encapsulation**: Keeping constructor parameters private and enforcing immutable agent instances.
+> **Goal:** Understand how the **Builder Pattern** makes Agent creation clean, configurable, validated, and extensible.
 
 ---
 
-## 2. Architecture of `AgentBuilder`
+# 1. 🤔 Why Use the Builder Pattern for Agents?
 
-```mermaid
-classDiagram
-    class AgentBuilder {
-        +instructions: string
-        +toolList: ITool[]
-        +interceptors: Interceptor[]
-        +model: string
-        +maxLoop: number
-        +setInstructions(instructions: string) AgentBuilder
-        +tool(t: ITool) AgentBuilder
-        +model(modelName: string) AgentBuilder
-        +setMaxLoop(limit: number) AgentBuilder
-        +attachInterceptor(interceptor: Interceptor) AgentBuilder
-        +build() Agent
-    }
+An Agent can have many configuration options:
 
-    class Agent {
-        -instructions: string
-        -toolMap: Map<string, ITool>
-        -messageHistory: IMessage[]
-        -interceptors: Interceptor[]
-        -maxLoop: number
-        +run(query: string) Promise~IMessage[]~
-        +static builder() AgentBuilder
-    }
+* 📜 System instructions
+* 🛠️ Tools
+* 👀 Interceptors / middleware
+* 🧠 Model name
+* 🌡️ Temperature
+* 📦 Max tokens
+* 🔄 Maximum loop iterations
+* 💾 Memory configuration
+* ✂️ Context pruning
+* 🛡️ Safety settings
 
-    AgentBuilder ..> Agent : instantiates
+Without a Builder, you may end up with a difficult constructor:
+
+```ts
+const agent = new Agent(
+    "You are a helper",
+    [tool1, tool2],
+    "gpt-4o",
+    30,
+    [logger],
+    true
+);
+```
+
+The problem is that it's hard to understand what each argument means.
+
+A Builder changes this into:
+
+```ts
+const agent = Agent.builder()
+    .setInstructions("You are a helper")
+    .tool(tool1)
+    .tool(tool2)
+    .model("gpt-4o")
+    .setMaxLoop(30)
+    .attachInterceptor(logger)
+    .build();
+```
+
+Now the configuration is **self-documenting**.
+
+---
+
+# 2. 🏗️ What is the Builder Pattern?
+
+The **Builder Pattern** separates:
+
+```text
+Object Configuration
+        ↓
+Object Creation
+```
+
+Instead of directly constructing an Agent, we first configure an `AgentBuilder`.
+
+```mermaid id="x5b4z7"
+flowchart LR
+
+    DEV["👨‍💻 Developer"]
+
+    BUILDER["🏗️ AgentBuilder"]
+
+    CONFIG["⚙️ Configuration"]
+
+    AGENT["🤖 Agent"]
+
+    DEV --> BUILDER
+
+    BUILDER --> CONFIG
+
+    CONFIG -->|"build()"| AGENT
+
+    classDef developer fill:#E3F2FD,stroke:#1565C0,stroke-width:2px,color:#000
+    classDef builder fill:#FFF3E0,stroke:#EF6C00,stroke-width:3px,color:#000
+    classDef config fill:#F3E5F5,stroke:#7B1FA2,stroke-width:2px,color:#000
+    classDef agent fill:#E8F5E9,stroke:#2E7D32,stroke-width:3px,color:#000
+
+    class DEV developer
+    class BUILDER builder
+    class CONFIG config
+    class AGENT agent
+```
+
+### Simple mental model
+
+> **Builder = Agent Configuration**
+
+> **Agent = Configured Runtime**
+
+---
+
+# 3. 🧩 AgentBuilder vs Agent
+
+This distinction is extremely important.
+
+| `AgentBuilder`             | `Agent`               |
+| -------------------------- | --------------------- |
+| Used during configuration  | Used during execution |
+| Stores configuration       | Stores runtime state  |
+| Collects tools             | Uses tools            |
+| Stores instructions        | Uses instructions     |
+| Stores model configuration | Calls the LLM         |
+| Stores interceptors        | Executes interceptors |
+| Calls `build()`            | Calls `run()`         |
+
+Think:
+
+```text
+🏗️ Builder
+   ↓
+"How should my Agent be configured?"
+
+          ↓ build()
+
+🤖 Agent
+   ↓
+"How should my Agent execute?"
 ```
 
 ---
 
-## 3. TypeScript Implementation
+# 4. 🏛️ Agent Architecture
 
-### Step 1: Defining Builder & Configuration Interfaces
+```mermaid id="5a5f40"
+flowchart TD
 
-```typescript
+    START(["🏗️ Agent Creation"])
+
+    BUILDER["🏗️ AgentBuilder"]
+
+    INSTRUCTIONS["📜 Instructions"]
+    TOOLS["🛠️ Tools"]
+    MODEL["🧠 Model"]
+    LOOP["🔄 Max Loop"]
+    INTERCEPTORS["👀 Interceptors"]
+
+    BUILD["🔨 build()"]
+
+    AGENT["🤖 Agent"]
+
+    STATE["🧠 Message History"]
+    TOOLMAP["🗺️ Tool Map"]
+    LLM["🔌 LLM Client"]
+    RUNTIME["⚙️ Agent Runtime"]
+
+    START --> BUILDER
+
+    BUILDER --> INSTRUCTIONS
+    BUILDER --> TOOLS
+    BUILDER --> MODEL
+    BUILDER --> LOOP
+    BUILDER --> INTERCEPTORS
+
+    INSTRUCTIONS --> BUILD
+    TOOLS --> BUILD
+    MODEL --> BUILD
+    LOOP --> BUILD
+    INTERCEPTORS --> BUILD
+
+    BUILD --> AGENT
+
+    AGENT --> STATE
+    AGENT --> TOOLMAP
+    AGENT --> LLM
+    AGENT --> RUNTIME
+
+    classDef start fill:#E3F2FD,stroke:#1565C0,stroke-width:3px,color:#000
+    classDef builder fill:#FFF3E0,stroke:#EF6C00,stroke-width:3px,color:#000
+    classDef config fill:#F3E5F5,stroke:#7B1FA2,stroke-width:2px,color:#000
+    classDef agent fill:#E8F5E9,stroke:#2E7D32,stroke-width:3px,color:#000
+    classDef runtime fill:#E0F7FA,stroke:#00838F,stroke-width:2px,color:#000
+
+    class START start
+    class BUILDER,BUILD builder
+    class INSTRUCTIONS,TOOLS,MODEL,LOOP,INTERCEPTORS config
+    class AGENT agent
+    class STATE,TOOLMAP,LLM,RUNTIME runtime
+```
+
+---
+
+# 5. 🧱 Configuration Interfaces
+
+Before creating the Builder, we define the basic types.
+
+## 🛠️ `ITool`
+
+```ts
 export interface ITool {
-  name: string;
-  description: string;
-  doc?: string;
-  executor: (input: string) => Promise<string> | string;
+    name: string;
+    description: string;
+    doc?: string;
+    executor: (input: string) => Promise<string> | string;
 }
-
-export interface IMessage {
-  role: "user" | "assistant" | "developer";
-  content: string;
-}
-
-export type Interceptor = (message: IMessage) => void;
 ```
 
-### Step 2: Implementing `AgentBuilder`
+Every tool must provide:
 
-```typescript
+```text
+🛠️ Tool
+ ├── name
+ ├── description
+ ├── doc
+ └── executor()
+```
+
+For example:
+
+```ts
+const cliTool: ITool = {
+    name: "execCli",
+    description: "Execute a CLI command",
+    doc: "execCli(command: string)",
+    executor: async (command) => {
+        // execute command
+    }
+};
+```
+
+---
+
+# 6. 💬 `IMessage`
+
+```ts
+export interface IMessage {
+    role: "user" | "assistant" | "developer";
+    content: string;
+}
+```
+
+This represents Agent state.
+
+Example:
+
+```ts
+{
+    role: "user",
+    content: "Create hello.cpp"
+}
+```
+
+The Agent stores these messages inside:
+
+```ts
+messageHistory: IMessage[]
+```
+
+---
+
+# 7. 👀 `Interceptor`
+
+```ts
+export type Interceptor =
+    (message: IMessage) => void;
+```
+
+An interceptor allows external code to observe Agent events.
+
+For example:
+
+```ts
+agent.attachInterceptor((msg) => {
+    console.log(msg);
+});
+```
+
+Useful for:
+
+```text
+👀 Logging
+📊 Tracing
+💰 Cost tracking
+🐛 Debugging
+📡 Monitoring
+```
+
+---
+
+# 8. 🏗️ Implementing `AgentBuilder`
+
+The Builder stores all configuration before the Agent is created.
+
+```ts
 export class AgentBuilder {
-  public instructions: string = "You are a helpful AI assistant.";
-  public toolList: ITool[] = [];
-  public interceptors: Interceptor[] = [];
-  public modelName: string = "gpt-4o";
-  public maxLoop: number = 30;
 
-  constructor() {}
+    public instructions =
+        "You are a helpful AI assistant.";
 
-  public setInstructions(instructions: string): this {
+    public toolList: ITool[] = [];
+
+    public interceptors: Interceptor[] = [];
+
+    public modelName = "gpt-4o";
+
+    public maxLoop = 30;
+
+    ...
+}
+```
+
+Conceptually:
+
+```text
+AgentBuilder
+│
+├── 📜 instructions
+├── 🛠️ toolList
+├── 👀 interceptors
+├── 🧠 modelName
+└── 🔄 maxLoop
+```
+
+---
+
+# 9. 🔗 Fluent Method Chaining
+
+The Builder methods return `this`.
+
+Example:
+
+```ts
+public setInstructions(instructions: string): this {
     this.instructions = instructions;
     return this;
-  }
-
-  public tool(t: ITool): this {
-    // Prevent duplicate tools by name
-    if (this.toolList.some(existing => existing.name === t.name)) {
-      throw new Error(`Tool with name '${t.name}' is already registered.`);
-    }
-    this.toolList.push(t);
-    return this;
-  }
-
-  public model(modelName: string): this {
-    this.modelName = modelName;
-    return this;
-  }
-
-  public setMaxLoop(limit: number): this {
-    this.maxLoop = limit;
-    return this;
-  }
-
-  public attachInterceptor(interceptor: Interceptor): this {
-    this.interceptors.push(interceptor);
-    return this;
-  }
-
-  public build(): Agent {
-    return new Agent(this);
-  }
 }
 ```
 
-### Step 3: Integrating Builder in `Agent` Class
+Because it returns `this`, we can chain:
 
-```typescript
-export class Agent {
-  private instructions: string;
-  private toolMap: Map<string, ITool>;
-  private messageHistory: IMessage[];
-  private interceptors: Interceptor[];
-  private maxLoop: number;
-  private modelName: string;
+```ts
+Agent.builder()
+    .setInstructions(...)
+    .tool(...)
+    .model(...)
+    .setMaxLoop(...)
+    .build();
+```
 
-  constructor(builder: AgentBuilder) {
+The flow is:
+
+```mermaid id="4a1lpf"
+flowchart LR
+
+    START["Agent.builder()"]
+
+    I["📜 setInstructions()"]
+    T["🛠️ tool()"]
+    M["🧠 model()"]
+    L["🔄 setMaxLoop()"]
+    X["👀 attachInterceptor()"]
+    B["🔨 build()"]
+
+    START --> I
+    I --> T
+    T --> M
+    M --> L
+    L --> X
+    X --> B
+
+    classDef start fill:#E3F2FD,stroke:#1565C0,stroke-width:3px,color:#000
+    classDef method fill:#FFF3E0,stroke:#EF6C00,stroke-width:2px,color:#000
+    classDef build fill:#E8F5E9,stroke:#2E7D32,stroke-width:3px,color:#000
+
+    class START start
+    class I,T,M,L,X method
+    class B build
+```
+
+---
+
+# 10. 🛠️ Registering Tools
+
+The Builder can register tools dynamically.
+
+```ts
+public tool(t: ITool): this {
+
+    if (
+        this.toolList.some(
+            existing => existing.name === t.name
+        )
+    ) {
+        throw new Error(
+            `Tool with name '${t.name}' is already registered.`
+        );
+    }
+
+    this.toolList.push(t);
+
+    return this;
+}
+```
+
+The important part is duplicate prevention:
+
+```ts
+existing.name === t.name
+```
+
+So this is invalid:
+
+```ts
+.tool(cliTool)
+.tool(cliTool)
+```
+
+because both have the same name.
+
+### Why this matters
+
+Later the Agent creates:
+
+```ts
+Map<string, ITool>
+```
+
+where the tool name becomes the key:
+
+```text
+"execCli" → cliTool
+"weather" → weatherTool
+"search"  → searchTool
+```
+
+Duplicate names would create ambiguity.
+
+---
+
+# 11. 🔨 `build()` — The Important Connection
+
+The Builder eventually creates the actual Agent:
+
+```ts
+public build(): Agent {
+    return new Agent(this);
+}
+```
+
+This single line connects the two classes:
+
+```text
+AgentBuilder
+     │
+     │ build()
+     ▼
+new Agent(builder)
+```
+
+The Agent constructor receives the **entire configured Builder**.
+
+```mermaid id="k0t9q7"
+flowchart LR
+
+    B["🏗️ AgentBuilder"]
+
+    I["📜 instructions"]
+    T["🛠️ toolList"]
+    M["🧠 modelName"]
+    L["🔄 maxLoop"]
+    X["👀 interceptors"]
+
+    CONSTRUCTOR["new Agent(builder)"]
+
+    A["🤖 Agent"]
+
+    B --> I
+    B --> T
+    B --> M
+    B --> L
+    B --> X
+
+    I --> CONSTRUCTOR
+    T --> CONSTRUCTOR
+    M --> CONSTRUCTOR
+    L --> CONSTRUCTOR
+    X --> CONSTRUCTOR
+
+    CONSTRUCTOR --> A
+
+    classDef builder fill:#FFF3E0,stroke:#EF6C00,stroke-width:3px,color:#000
+    classDef config fill:#F3E5F5,stroke:#7B1FA2,stroke-width:2px,color:#000
+    classDef agent fill:#E8F5E9,stroke:#2E7D32,stroke-width:3px,color:#000
+
+    class B,CONSTRUCTOR builder
+    class I,T,M,L,X config
+    class A agent
+```
+
+---
+
+# 12. 🤖 How `Agent` Receives the Configuration
+
+The Agent constructor can then transfer Builder configuration into runtime state:
+
+```ts
+constructor(builder: AgentBuilder) {
+
     this.modelName = builder.modelName;
+
     this.maxLoop = builder.maxLoop;
-    this.interceptors = [...builder.interceptors];
+
+    this.interceptors = [
+        ...builder.interceptors
+    ];
+
     this.messageHistory = [];
+
     this.toolMap = new Map();
 
     for (const tool of builder.toolList) {
-      this.toolMap.set(tool.name, tool);
+        this.toolMap.set(tool.name, tool);
     }
 
-    // Assemble system instructions with harness prompt and tools schema
     this.instructions = builder.instructions;
-  }
-
-  public static builder(): AgentBuilder {
-    return new AgentBuilder();
-  }
 }
 ```
 
----
+The important transformation is:
 
-## 4. Developer Usage Example
-
-```typescript
-const agent = Agent.builder()
-  .setInstructions("You are a senior DevOps specialist.")
-  .tool(cliAccessTool)
-  .tool(logAnalyzerTool)
-  .model("gpt-4o")
-  .setMaxLoop(15)
-  .attachInterceptor((msg) => console.log(`[EVENT] ${msg.role}: ${msg.content}`))
-  .build();
+```text
+Builder Configuration
+        ↓
+     Constructor
+        ↓
+Agent Runtime State
 ```
 
 ---
 
-## 5. Summary Key Takeaways
+# 13. 🗺️ Tool List → Tool Map
 
-1. **`Agent.builder()`** provides an elegant entry point for agent construction.
-2. Method chaining ensures dynamic registration of tools and interceptors.
-3. Decoupling initialization from execution enables reproducible agent templates and reusable configurations.
+This is an especially important design decision.
+
+The Builder stores:
+
+```ts
+toolList: ITool[]
+```
+
+Example:
+
+```text
+[
+    cliTool,
+    weatherTool,
+    searchTool
+]
+```
+
+The Agent converts this into:
+
+```ts
+Map<string, ITool>
+```
+
+Result:
+
+```text
+toolMap
+
+"execCli"    → cliTool
+"weather"    → weatherTool
+"search"     → searchTool
+```
+
+Why?
+
+Because when the LLM returns:
+
+```json
+{
+    "functionName": "execCli"
+}
+```
+
+the Agent can quickly do:
+
+```ts
+this.toolMap.get("execCli")
+```
+
+and find the executor.
+
+---
+
+# 14. 🧠 Builder → Agent → LLM
+
+The complete relationship is:
+
+```mermaid id="v4e1p8"
+flowchart TD
+
+    DEV["👨‍💻 Developer"]
+
+    BUILDER["🏗️ AgentBuilder"]
+
+    CONFIG["⚙️ Agent Configuration"]
+
+    BUILD["🔨 build()"]
+
+    AGENT["🤖 Agent"]
+
+    PROMPT["📜 System Instructions"]
+
+    TOOLS["🛠️ Tool Map"]
+
+    STATE["🧠 Message History"]
+
+    LLM["🧠 LLM"]
+
+    DEV --> BUILDER
+
+    BUILDER --> CONFIG
+    CONFIG --> BUILD
+    BUILD --> AGENT
+
+    AGENT --> PROMPT
+    AGENT --> TOOLS
+    AGENT --> STATE
+
+    PROMPT --> LLM
+    STATE --> LLM
+    LLM --> AGENT
+
+    AGENT --> TOOLS
+
+    classDef dev fill:#E3F2FD,stroke:#1565C0,stroke-width:2px,color:#000
+    classDef builder fill:#FFF3E0,stroke:#EF6C00,stroke-width:3px,color:#000
+    classDef agent fill:#E8F5E9,stroke:#2E7D32,stroke-width:3px,color:#000
+    classDef state fill:#E0F7FA,stroke:#00838F,stroke-width:2px,color:#000
+    classDef llm fill:#F3E5F5,stroke:#7B1FA2,stroke-width:3px,color:#000
+
+    class DEV dev
+    class BUILDER,CONFIG,BUILD builder
+    class AGENT,PROMPT,TOOLS agent
+    class STATE state
+    class LLM llm
+```
+
+---
+
+# 15. 👨‍💻 Developer Usage
+
+Now the developer can create an Agent like this:
+
+```ts
+const agent = Agent.builder()
+
+    .setInstructions(
+        "You are a senior DevOps specialist."
+    )
+
+    .tool(cliAccessTool)
+
+    .tool(logAnalyzerTool)
+
+    .model("gpt-4o")
+
+    .setMaxLoop(15)
+
+    .attachInterceptor((msg) => {
+        console.log(
+            `[EVENT] ${msg.role}: ${msg.content}`
+        );
+    })
+
+    .build();
+```
+
+This reads almost like configuration:
+
+```text
+Agent
+ │
+ ├── 📜 Role
+ │    └── Senior DevOps specialist
+ │
+ ├── 🛠️ Tools
+ │    ├── CLI
+ │    └── Log Analyzer
+ │
+ ├── 🧠 Model
+ │    └── GPT-4o
+ │
+ ├── 🔄 Max Loop
+ │    └── 15
+ │
+ └── 👀 Interceptor
+      └── Logger
+```
+
+---
+
+# 16. 🔄 Builder Lifecycle
+
+The complete lifecycle is:
+
+```mermaid id="c2k4s6"
+flowchart TD
+
+    START(["🚀 Start"])
+
+    CREATE["Agent.builder()"]
+
+    CONFIG1["📜 Configure Instructions"]
+    CONFIG2["🛠️ Register Tools"]
+    CONFIG3["🧠 Configure Model"]
+    CONFIG4["🔄 Configure Loop"]
+    CONFIG5["👀 Add Interceptors"]
+
+    VALIDATE["🛡️ Validate Configuration"]
+
+    BUILD["🔨 build()"]
+
+    AGENT["🤖 Agent Instance"]
+
+    RUN["▶️ agent.run(query)"]
+
+    END(["✅ Agent Executes"])
+
+    START --> CREATE
+
+    CREATE --> CONFIG1
+    CONFIG1 --> CONFIG2
+    CONFIG2 --> CONFIG3
+    CONFIG3 --> CONFIG4
+    CONFIG4 --> CONFIG5
+
+    CONFIG5 --> VALIDATE
+    VALIDATE --> BUILD
+    BUILD --> AGENT
+    AGENT --> RUN
+    RUN --> END
+
+    classDef start fill:#E3F2FD,stroke:#1565C0,stroke-width:3px,color:#000
+    classDef config fill:#FFF3E0,stroke:#EF6C00,stroke-width:2px,color:#000
+    classDef validation fill:#FFF9C4,stroke:#F9A825,stroke-width:3px,color:#000
+    classDef agent fill:#E8F5E9,stroke:#2E7D32,stroke-width:3px,color:#000
+    classDef end fill:#FCE4EC,stroke:#C2185B,stroke-width:3px,color:#000
+
+    class START start
+    class CREATE,CONFIG1,CONFIG2,CONFIG3,CONFIG4,CONFIG5,BUILD config
+    class VALIDATE validation
+    class AGENT,RUN agent
+    class END end
+```
+
+> **Note:** Your current `build()` implementation does not actually perform validation yet. The diagram shows where validation **could/should** be added as the SDK becomes more production-ready.
+
+---
+
+# 17. 🆚 Without Builder vs With Builder
+
+### ❌ Without Builder
+
+```ts
+const agent = new Agent(
+    instructions,
+    tools,
+    interceptors,
+    model,
+    maxLoop,
+    memory,
+    ...
+);
+```
+
+Problems:
+
+```text
+❌ Hard to read
+❌ Parameter order matters
+❌ Many optional values
+❌ Difficult to extend
+❌ Difficult to validate
+```
+
+### ✅ With Builder
+
+```ts
+const agent = Agent.builder()
+    .setInstructions(...)
+    .tool(...)
+    .model(...)
+    .setMaxLoop(...)
+    .attachInterceptor(...)
+    .build();
+```
+
+Benefits:
+
+```text
+✅ Readable
+✅ Fluent API
+✅ Easy to extend
+✅ Configuration is centralized
+✅ Better validation point
+✅ Cleaner Agent constructor
+```
+
+---
+
+# 18. 🧠 Why `Agent.builder()` Is Static
+
+Inside `Agent`:
+
+```ts
+public static builder(): AgentBuilder {
+    return new AgentBuilder();
+}
+```
+
+This allows:
+
+```ts
+Agent.builder()
+```
+
+instead of:
+
+```ts
+new AgentBuilder()
+```
+
+So `Agent` becomes the public entry point:
+
+```text
+Developer
+    │
+    ▼
+Agent.builder()
+    │
+    ▼
+AgentBuilder
+    │
+    ▼
+build()
+    │
+    ▼
+Agent
+```
+
+This makes the SDK API feel natural.
+
+---
+
+# 19. 🎯 Builder Pattern in One Diagram
+
+```mermaid id="v5j4n0"
+flowchart LR
+
+    USER["👨‍💻 Developer"]
+
+    B["🏗️ AgentBuilder"]
+
+    C1["📜 Instructions"]
+    C2["🛠️ Tools"]
+    C3["🧠 Model"]
+    C4["🔄 Loop"]
+    C5["👀 Interceptors"]
+
+    BUILD["🔨 build()"]
+
+    A["🤖 Configured Agent"]
+
+    RUN["▶️ run()"]
+
+    USER --> B
+
+    B --> C1
+    B --> C2
+    B --> C3
+    B --> C4
+    B --> C5
+
+    C1 --> BUILD
+    C2 --> BUILD
+    C3 --> BUILD
+    C4 --> BUILD
+    C5 --> BUILD
+
+    BUILD --> A
+    A --> RUN
+
+    classDef user fill:#E3F2FD,stroke:#1565C0,stroke-width:3px,color:#000
+    classDef builder fill:#FFF3E0,stroke:#EF6C00,stroke-width:3px,color:#000
+    classDef config fill:#F3E5F5,stroke:#7B1FA2,stroke-width:2px,color:#000
+    classDef agent fill:#E8F5E9,stroke:#2E7D32,stroke-width:3px,color:#000
+
+    class USER user
+    class B,BUILD builder
+    class C1,C2,C3,C4,C5 config
+    class A,RUN agent
+```
+
+---
+
+# 20. 🔑 Key Takeaways
+
+### 1. 🏗️ Builder configures the Agent
+
+```text
+AgentBuilder = Configuration
+```
+
+### 2. 🤖 Agent performs the work
+
+```text
+Agent = Runtime
+```
+
+### 3. 🔗 `build()` connects them
+
+```ts
+return new Agent(this);
+```
+
+### 4. 🛠️ Tools are registered during configuration
+
+```ts
+.tool(cliAccessTool)
+```
+
+and converted into:
+
+```text
+toolMap
+```
+
+inside the Agent.
+
+### 5. 📜 Instructions become Agent configuration
+
+```ts
+.setInstructions(...)
+```
+
+then:
+
+```text
+builder.instructions
+        ↓
+agent.instructions
+        ↓
+system prompt
+        ↓
+LLM
+```
+
+### 6. 👀 Interceptors are configured before execution
+
+```ts
+.attachInterceptor(...)
+```
+
+then copied into the Agent runtime.
+
+### 7. 🔄 Builder enables fluent configuration
+
+```ts
+Agent.builder()
+    .setInstructions(...)
+    .tool(...)
+    .model(...)
+    .setMaxLoop(...)
+    .build();
+```
+
+---
+
+# 🧠 Final Mental Model
+
+Remember these three lines:
+
+```text
+🏗️ AgentBuilder
+      ↓
+   CONFIGURE
+      ↓
+🤖 Agent
+      ↓
+   EXECUTE
+```
+
+Or:
+
+> **Builder decides WHAT the Agent has. Agent decides HOW the Agent runs.**
+
+And the complete Agent SDK architecture becomes:
+
+```text
+👨‍💻 Developer
+      │
+      ▼
+🏗️ AgentBuilder
+      │
+      ├── 📜 Instructions
+      ├── 🛠️ Tools
+      ├── 🧠 Model
+      ├── 🔄 Loop Limits
+      └── 👀 Interceptors
+      │
+      ▼
+🔨 build()
+      │
+      ▼
+🤖 Agent Runtime
+      │
+      ├── 🧠 State
+      ├── 🗺️ Tool Map
+      ├── 📜 System Prompt
+      └── 🔌 LLM Client
+      │
+      ▼
+▶️ agent.run()
+      │
+      ▼
+🧠 LLM ↔ 🛠️ Tools ↔ 🧠 State
+      │
+      ▼
+✅ Final Output
+```
+
+### ⭐ Core Formula
+
+$$
+\boxed{
+\text{Agent}
+=
+\text{Builder Configuration}
++
+\text{Runtime State}
++
+\text{LLM}
++
+\text{Tools}
++
+\text{Execution Loop}
+}
+$$
