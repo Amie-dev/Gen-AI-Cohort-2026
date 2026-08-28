@@ -45,6 +45,7 @@
 All sample and production implementations are located in:
 👉 **[day08 code directory](file:///home/aminul/development/gen-ai-cohort/week04/learning/day08/code)**
 
-- 📁 **[agent-sdk-complete/](file:///home/aminul/development/gen-ai-cohort/week04/learning/day08/code/agent-sdk-complete)** — Clean, production-ready custom Agent SDK framework in TypeScript.
-- 📁 **[agent-sdk-sir/](file:///home/aminul/development/gen-ai-cohort/week04/learning/day08/code/agent-sdk-sir)** — Instructor class reference project with OpenAI integration.
+- 📁 **[agent-sdk-gemini/](file:///home/aminul/development/gen-ai-cohort/week04/learning/day08/code/agent-sdk-gemini)** — Custom Agent SDK powered by Google Gemini (`@google/generative-ai`).
+- 📁 **[agent-sdk-complete/](file:///home/aminul/development/gen-ai-cohort/week04/learning/day08/code/agent-sdk-complete)** — Custom Agent SDK framework in TypeScript powered by OpenAI.
+- 📁 **[agent-sdk-sir/](file:///home/aminul/development/gen-ai-cohort/week04/learning/day08/code/agent-sdk-sir)** — Instructor class reference project.
 - 📁 **[agent-sdk/](file:///home/aminul/development/gen-ai-cohort/week04/learning/day08/code/agent-sdk)** — Starter agent SDK package.
