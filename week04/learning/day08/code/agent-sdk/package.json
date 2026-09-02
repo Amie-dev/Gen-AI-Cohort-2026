@@ -1,0 +1,20 @@
+{
+  "name": "agent-sdk",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "tsc - p . && node dist/index.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "devDependencies": {
+    "@types/node": "^26.4.0"
+  },
+  "dependencies": {
+    "axios": "^1.20.0",
+    "openai": "^7.9.0"
+  }
+}
