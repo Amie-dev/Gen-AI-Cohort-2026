@@ -1190,3 +1190,182 @@ Remember this single flow:
 
 > **Best one-line interview answer:**
 > **“An Agent SDK wraps an LLM with state, tools, structured prompting, and a controlled execution loop; the LLM decides the next step, while the Agent runtime manages tool execution, message history, observability, and safety.”**
+
+---
+
+# 11 — Practical TypeScript / Node.js Agent SDK Code Implementations
+
+## Q46: Write a production-ready TypeScript implementation of the Tool Registry (`ITool`), `AgentBuilder`, and `Agent` execution loop.
+
+### 💡 Answer
+
+```typescript
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
+// 1. Tool Interface Definition
+export interface ITool {
+  name: string;
+  description: string;
+  doc?: string;
+  executor: (input: string) => Promise<string> | string;
+}
+
+export interface IMessage {
+  role: "user" | "assistant" | "developer";
+  content: string;
+}
+
+export type InterceptorFn = (message: IMessage) => void;
+
+// 2. Agent Class Implementation
+export class Agent {
+  private instructions: string;
+  private toolMap: Map<string, ITool>;
+  private messageHistory: IMessage[];
+  private maxLoop: number;
+  private interceptors: InterceptorFn[];
+  private aiModel: any;
+
+  constructor(builder: AgentBuilder) {
+    this.instructions = builder.instructions;
+    this.toolMap = builder.toolMap;
+    this.maxLoop = builder.maxLoop;
+    this.interceptors = builder.interceptors;
+    this.messageHistory = [];
+
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
+    this.aiModel = genAI.getGenerativeModel({ model: builder.modelName });
+  }
+
+  static builder(): AgentBuilder {
+    return new AgentBuilder();
+  }
+
+  private notifyInterceptors(msg: IMessage) {
+    for (const interceptor of this.interceptors) {
+      interceptor(msg);
+    }
+  }
+
+  public async run(userGoal: string): Promise<string> {
+    const initialMsg: IMessage = { role: "user", content: userGoal };
+    this.messageHistory.push(initialMsg);
+    this.notifyInterceptors(initialMsg);
+
+    let iterations = 0;
+
+    while (iterations < this.maxLoop) {
+      iterations++;
+
+      // Construct prompt payload with Harness System Instructions
+      const promptPayload = `
+${this.instructions}
+
+Available Tools:
+${Array.from(this.toolMap.values())
+  .map((t) => `- ${t.name}: ${t.description} (Doc: ${t.doc || "N/A"})`)
+  .join("\n")}
+
+Message History:
+${JSON.stringify(this.messageHistory, null, 2)}
+`;
+
+      const result = await this.aiModel.generateContent(promptPayload);
+      const rawResponse = result.response.text();
+
+      // Robust JSON Extraction
+      const jsonMatch = rawResponse.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        const errorMsg: IMessage = {
+          role: "developer",
+          content: "Error: Response was not valid JSON. Retrying...",
+        };
+        this.messageHistory.push(errorMsg);
+        this.notifyInterceptors(errorMsg);
+        continue;
+      }
+
+      const parsed = JSON.parse(jsonMatch[0]);
+
+      if (parsed.step?.toLowerCase() === "output") {
+        const finalMsg: IMessage = { role: "assistant", content: parsed.text };
+        this.messageHistory.push(finalMsg);
+        this.notifyInterceptors(finalMsg);
+        return parsed.text;
+      }
+
+      if (parsed.step?.toUpperCase() === "TOOL_REQUEST") {
+        const { functionName, input } = parsed;
+        const tool = this.toolMap.get(functionName);
+
+        if (!tool) {
+          const errMsg: IMessage = {
+            role: "developer",
+            content: `Error: Tool '${functionName}' is not registered.`,
+          };
+          this.messageHistory.push(errMsg);
+          this.notifyInterceptors(errMsg);
+          continue;
+        }
+
+        try {
+          const toolResult = await tool.executor(input);
+          const devMsg: IMessage = {
+            role: "developer",
+            content: `Tool '${functionName}' Result: ${toolResult}`,
+          };
+          this.messageHistory.push(devMsg);
+          this.notifyInterceptors(devMsg);
+        } catch (err: any) {
+          const errMsg: IMessage = {
+            role: "developer",
+            content: `Tool Execution Error: ${err.message}`,
+          };
+          this.messageHistory.push(errMsg);
+          this.notifyInterceptors(errMsg);
+        }
+      }
+    }
+
+    throw new Error(`Agent exceeded maximum execution loop limit (${this.maxLoop}).`);
+  }
+}
+
+// 3. AgentBuilder Class Implementation
+export class AgentBuilder {
+  public instructions: string = "You are a helpful autonomous agent.";
+  public toolMap: Map<string, ITool> = new Map();
+  public maxLoop: number = 15;
+  public interceptors: InterceptorFn[] = [];
+  public modelName: string = "gemini-1.5-flash";
+
+  setInstructions(instructions: string): this {
+    this.instructions = instructions;
+    return this;
+  }
+
+  setModel(modelName: string): this {
+    this.modelName = modelName;
+    return this;
+  }
+
+  setMaxLoop(limit: number): this {
+    this.maxLoop = limit;
+    return this;
+  }
+
+  registerTool(tool: ITool): this {
+    this.toolMap.set(tool.name, tool);
+    return this;
+  }
+
+  attachInterceptor(fn: InterceptorFn): this {
+    this.interceptors.push(fn);
+    return this;
+  }
+
+  build(): Agent {
+    return new Agent(this);
+  }
+}
+```

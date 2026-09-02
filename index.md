@@ -115,3 +115,41 @@
 
 🔗 **Read More:**
 [Day 06 Main Index](./week03/learning/day06/notes/index.md) | [GitHub Link](https://github.com/Amie-dev/Gen-AI-Cohort-2026/blob/main/week03/learning/day06/notes/index.md)
+
+---
+
+🗓️ **Week 04 — Agent Memory Systems, vLLM High-Performance Inference & Autonomous Agent SDK Frameworks**
+> Master agent application-level memory architectures (Short-Term Memory sliding windows, Long-Term Memory taxonomy, vector RAG integration, Memory Dreaming reflection, mem0), high-performance LLM hardware & inference engines (Prefill vs. Decode, Berkeley vLLM, PagedAttention), and building autonomous Agent SDK frameworks from scratch using TypeScript and Node.js.
+
+---
+
+📅 **Day 07 — Agent Memory Systems & High-Performance LLM Inference (vLLM)**
+* Stateless LLM APIs & Context Window Failure Points (Bandwidth, Latency, Token Costs, Attention Degradation)
+* Short-Term Memory (STM) & Sliding Window Buffers ($N$ turns + Database Persistence)
+* Long-Term Memory (LTM) Taxonomy: Semantic Memory (Facts), Episodic Memory (Events), and Graph Memory (Neo4j)
+* Dynamic Context Assembly ($\text{STM} + \text{LTM\_RAG} + \text{Query}$) & LLM Fact Extraction Pipelines
+* Memory Eviction, Contradiction Resolution & Claude-Style Memory Dreaming (Background Offline Reflection)
+* Managed Agent Memory Frameworks (`mem0`) & Latency Pre-Fetching Optimizations
+* LLM Hardware Mechanics: GPU VRAM HBM, Compute-Bound Training vs. Memory-Bandwidth-Bound Inference
+* Inference Engine Architecture (The "Nginx of LLMs"): Prefill Phase (Parallel Prompt) vs. Decode Phase (Auto-Regressive Generation)
+* UC Berkeley vLLM Architecture & PagedAttention (Virtual Memory Paging eliminating KV Cache Fragmentation)
+* Continuous Batching, Prefix Caching, Chunked Prefill & Mixture-of-Experts (MoE) Kernels
+
+🔗 **Read More:**
+[Day 07 Main Index](./week04/learning/day07/notes/completed%20notes.md) | [GitHub Link](https://github.com/Amie-dev/Gen-AI-Cohort-2026/blob/main/week04/learning/day07/notes/completed%20notes.md)
+
+---
+
+📅 **Day 08 — Autonomous Agent SDK Framework Architecture & Custom Agent Engine from Scratch**
+* Stateful Agent SDKs vs. Stateless LLM APIs
+* The Core Agent Triad ($\text{LLM Engine} + \text{Harness Prompt} + \text{Tools}$)
+* Fluent `AgentBuilder` Design Pattern & Configuration Decoupling
+* Harness Prompting & 5-Stage ReAct Execution Pipeline (`INITIAL` $\rightarrow$ `THINK` $\rightarrow$ `TOOL_REQUEST` $\rightarrow$ `ANALYSE` $\rightarrow$ `OUTPUT`)
+* Structured JSON Schema Output Enforcement & Anti-Hallucination Regex Parsing
+* `ITool` Interface Specification, Dynamic Tool Schema Auto-Generation & Tool Registry Engine
+* Stateful `messageHistory` Execution Lifecycle (`user`, `assistant`, `developer`)
+* Event-Driven Interceptor Pattern (`attachInterceptor`, `notifyInterceptors`) & Loop Bounds (`MAX_LOOP`)
+* Building Production Custom Agent SDKs in TypeScript & Node.js (OpenAI & Google Gemini SDK Implementations)
+
+🔗 **Read More:**
+[Day 08 Main Index](./week04/learning/day08/notes/completed%20notes.md) | [GitHub Link](https://github.com/Amie-dev/Gen-AI-Cohort-2026/blob/main/week04/learning/day08/notes/completed%20notes.md)

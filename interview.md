@@ -13,6 +13,7 @@ Welcome to the **Gen AI Application Engineering & Agent Architecture Interview G
 * 🟡 **[Week 03 — Day 05: Advanced RAG Pipelines, Routing, RRF & CRAG](#-week-03--day-05-advanced-production-rag-pipelines-query-transformations-routing-rrf--crag)** | [Direct Link](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/notes/interview.md)
 * 🟢 **[Week 03 — Day 06: Vectorless RAG, Hierarchical Trees & LLM Wiki Engines](#-week-03--day-06-vectorless-rag-hierarchical-tree-indexing-agentic-search--llm-wiki-engines)** | [Direct Link](file:///home/aminul/development/gen-ai-cohort/week03/learning/day06/notes/interview.md)
 * 🔴 **[Week 04 — Day 07: Application Memory Systems & vLLM Inference Engine](#-week-04--day-07-agent-application-level-memory-systems--high-performance-llm-inference-vllm)** | [Direct Link](file:///home/aminul/development/gen-ai-cohort/week04/learning/day07/notes/interview.md)
+* 🤖 **[Week 04 — Day 08: Autonomous Agent SDK Framework Architecture & Custom Agent Engine](#-week-04--day-08-autonomous-agent-sdk-framework-architecture--custom-agent-engine-from-scratch)** | [Direct Link](file:///home/aminul/development/gen-ai-cohort/week04/learning/day08/notes/Interview.md)
 
 ---
 
@@ -1449,6 +1450,261 @@ export class MemoryDreamer {
     return Array.from(consolidatedMap.values());
   }
 }
+```
+
+---
+---
+
+# 🤖 Week 04 — Day 08: Autonomous Agent SDK Framework Architecture & Custom Agent Engine from Scratch
+
+> **Topic Focus:** Stateful Agent SDK vs Stateless LLM APIs, Core Agent Triad ($\text{LLM Engine} + \text{Harness Prompt} + \text{Tools}$), Builder Pattern Architecture (`AgentBuilder`), 5-Stage ReAct Pipeline (`INITIAL` $\rightarrow$ `THINK` $\rightarrow$ `TOOL_REQUEST` $\rightarrow$ `ANALYSE` $\rightarrow$ `OUTPUT`), `ITool` Interface Contract & Dynamic Tool Registry (`Map<string, ITool>`), Message State Execution Lifecycle (`user`, `assistant`, `developer`), Event-Driven Interceptor Middleware, Defensive JSON Extraction, and Safety Guardrails (`MAX_LOOP`).
+
+---
+
+## 📑 Day 08 Table of Contents
+
+1. [Category 1 — Agent SDK Architecture & Stateless vs Stateful Paradigm](#1-category-1--agent-sdk-architecture--stateless-vs-stateful-paradigm)
+2. [Category 2 — Builder Pattern & Harness Prompt Engineering](#2-category-2--builder-pattern--harness-prompt-engineering)
+3. [Category 3 — Tool Registry & ReAct Execution Engine](#3-category-3--tool-registry--react-execution-engine)
+4. [Category 4 — Interceptor Middleware & Safety Guardrails](#4-category-4--interceptor-middleware--safety-guardrails)
+5. [Category 5 — Practical TypeScript / Node.js Agent SDK Code Implementations](#5-category-5--practical-typescript--nodejs-agent-sdk-code-implementations)
+
+---
+
+# 1. Category 1 — Agent SDK Architecture & Stateless vs Stateful Paradigm
+
+## Q1: What is an Agent SDK and why do production multi-turn workflows require it over raw LLM APIs?
+
+### 💡 Answer:
+An **Agent SDK** is an abstraction framework that wraps stateless LLM APIs into a **stateful autonomous execution runtime**.
+
+While raw LLM APIs (`POST /chat/completions`) follow a stateless request-response model, an Agent SDK provides the runtime engine to orchestrate multi-turn autonomous loops:
+
+```text
+Raw LLM API:
+User Request ──> LLM ──> Text Output
+
+Agent SDK Runtime:
+User Request ──> Agent State ──> LLM ──> Tool Request ──> Executor ──> Developer Feedback ──> State ──> LLM ──> Output
+```
+
+### 🧱 Core Agent Triad:
+Every Agent System consists of three foundational components:
+1. **LLM Engine:** The reasoning and generation model (e.g. OpenAI GPT-4o, Google Gemini).
+2. **Instructions & Harness Prompt:** System-level instructions defining role, protocol, and strict JSON output schemas.
+3. **Tools Registry:** Executable software functions enabling interaction with external systems (APIs, CLI, Databases).
+
+---
+
+# 2. Category 2 — Builder Pattern & Harness Prompt Engineering
+
+## Q2: Why is the Builder Pattern essential for Agent SDK configuration, and what is a Harness Prompt?
+
+### 💡 Answer:
+* **Builder Pattern (`AgentBuilder`):** Decouples complex agent configuration (model selection, instructions, max loop bounds, tool registration, interceptors) from the execution engine. It provides a readable fluent interface with method chaining (`.setInstructions()`, `.registerTool()`, `.attachInterceptor()`, `.build()`).
+* **Harness Prompt:** A meta-system prompt injected by the framework that governs the LLM's operational protocol. It enforces structured step-by-step reasoning and machine-readable JSON outputs.
+
+### 🔄 5-Stage ReAct Execution Pipeline:
+```mermaid
+flowchart LR
+    INITIAL["1. INITIAL<br/>(Goal Input)"] --> THINK["2. THINK<br/>(Decompose Step)"]
+    THINK --> TOOL["3. TOOL_REQUEST<br/>(Request Tool)"]
+    TOOL --> ANALYSE["4. ANALYSE<br/>(Evaluate Result)"]
+    ANALYSE --> OUTPUT["5. OUTPUT<br/>(Final Response)"]
+    ANALYSE -. Retry Loop .-> THINK
+```
+
+---
+
+# 3. Category 3 — Tool Registry & ReAct Execution Engine
+
+## Q3: How does the Tool Registry work under the hood, and does the LLM execute tools directly?
+
+### 💡 Answer:
+* **Tool Registry (`Map<string, ITool>`):** Stores registered tools keyed by function name for $O(1)$ average lookup efficiency.
+* **LLM Tool Decoupling:** **The LLM never directly executes code or tools.** The LLM merely outputs a structured `TOOL_REQUEST` JSON specifying `functionName` and `input`. The **Agent SDK runtime** intercepting the payload looks up the function in `toolMap` and calls `tool.executor(input)`.
+
+---
+
+# 4. Category 4 — Interceptor Middleware & Safety Guardrails
+
+## Q4: What is the Interceptor Pattern and why is `MAX_LOOP` mandatory for autonomous agents?
+
+### 💡 Answer:
+* **Interceptor Pattern:** Implements an Event Observer pattern (`attachInterceptor(fn)`). Whenever messages (`user`, `assistant`, `developer`) enter state, all registered interceptors run asynchronously to provide logging, metrics, and tracing without polluting core agent logic.
+* **`MAX_LOOP` Safety Guard:** Prevents infinite agent loops and runaway token billing when an LLM fails to emit an `OUTPUT` step. If loop iterations reach `MAX_LOOP`, execution halts with an explicit safety exception.
+
+---
+
+# 5. Category 5 — Practical TypeScript / Node.js Agent SDK Code Implementations
+
+## Q5: Write a complete production TypeScript implementation of an Agent SDK with Builder Pattern, Tool Execution, and Interceptors.
+
+```typescript
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
+export interface ITool {
+  name: string;
+  description: string;
+  doc?: string;
+  executor: (input: string) => Promise<string> | string;
+}
+
+export interface IMessage {
+  role: "user" | "assistant" | "developer";
+  content: string;
+}
+
+export type InterceptorFn = (message: IMessage) => void;
+
+export class Agent {
+  private instructions: string;
+  private toolMap: Map<string, ITool>;
+  private messageHistory: IMessage[];
+  private maxLoop: number;
+  private interceptors: InterceptorFn[];
+  private aiModel: any;
+
+  constructor(builder: AgentBuilder) {
+    this.instructions = builder.instructions;
+    this.toolMap = builder.toolMap;
+    this.maxLoop = builder.maxLoop;
+    this.interceptors = builder.interceptors;
+    this.messageHistory = [];
+
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
+    this.aiModel = genAI.getGenerativeModel({ model: builder.modelName });
+  }
+
+  static builder(): AgentBuilder {
+    return new AgentBuilder();
+  }
+
+  private notifyInterceptors(msg: IMessage) {
+    for (const interceptor of this.interceptors) {
+      interceptor(msg);
+    }
+  }
+
+  public async run(userGoal: string): Promise<string> {
+    const initialMsg: IMessage = { role: "user", content: userGoal };
+    this.messageHistory.push(initialMsg);
+    this.notifyInterceptors(initialMsg);
+
+    let iterations = 0;
+
+    while (iterations < this.maxLoop) {
+      iterations++;
+
+      const promptPayload = `
+${this.instructions}
+
+Available Tools:
+${Array.from(this.toolMap.values())
+  .map((t) => `- ${t.name}: ${t.description} (Doc: ${t.doc || "N/A"})`)
+  .join("\n")}
+
+Message History:
+${JSON.stringify(this.messageHistory, null, 2)}
+`;
+
+      const result = await this.aiModel.generateContent(promptPayload);
+      const rawResponse = result.response.text();
+
+      const jsonMatch = rawResponse.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        const errorMsg: IMessage = {
+          role: "developer",
+          content: "Error: Response was not valid JSON. Retrying...",
+        };
+        this.messageHistory.push(errorMsg);
+        this.notifyInterceptors(errorMsg);
+        continue;
+      }
+
+      const parsed = JSON.parse(jsonMatch[0]);
+
+      if (parsed.step?.toLowerCase() === "output") {
+        const finalMsg: IMessage = { role: "assistant", content: parsed.text };
+        this.messageHistory.push(finalMsg);
+        this.notifyInterceptors(finalMsg);
+        return parsed.text;
+      }
+
+      if (parsed.step?.toUpperCase() === "TOOL_REQUEST") {
+        const { functionName, input } = parsed;
+        const tool = this.toolMap.get(functionName);
+
+        if (!tool) {
+          const errMsg: IMessage = {
+            role: "developer",
+            content: `Error: Tool '${functionName}' is not registered.`,
+          };
+          this.messageHistory.push(errMsg);
+          this.notifyInterceptors(errMsg);
+          continue;
+        }
+
+        try {
+          const toolResult = await tool.executor(input);
+          const devMsg: IMessage = {
+            role: "developer",
+            content: `Tool '${functionName}' Result: ${toolResult}`,
+          };
+          this.messageHistory.push(devMsg);
+          this.notifyInterceptors(devMsg);
+        } catch (err: any) {
+          const errMsg: IMessage = {
+            role: "developer",
+            content: `Tool Execution Error: ${err.message}`,
+          };
+          this.messageHistory.push(errMsg);
+          this.notifyInterceptors(errMsg);
+        }
+      }
+    }
+
+    throw new Error(`Agent exceeded maximum execution loop limit (${this.maxLoop}).`);
+  }
+}
+
+export class AgentBuilder {
+  public instructions: string = "You are a helpful autonomous agent.";
+  public toolMap: Map<string, ITool> = new Map();
+  public maxLoop: number = 15;
+  public interceptors: InterceptorFn[] = [];
+  public modelName: string = "gemini-1.5-flash";
+
+  setInstructions(instructions: string): this {
+    this.instructions = instructions;
+    return this;
+  }
+
+  setModel(modelName: string): this {
+    this.modelName = modelName;
+    return this;
+  }
+
+  setMaxLoop(limit: number): this {
+    this.maxLoop = limit;
+    return this;
+  }
+
+  registerTool(tool: ITool): this {
+    this.toolMap.set(tool.name, tool);
+    return this;
+  }
+
+  attachInterceptor(fn: InterceptorFn): this {
+    this.interceptors.push(fn);
+    return this;
+  }
+
+  build(): Agent {
+    return new Agent(this);
+  }
+}
+```
 ```
 
 
