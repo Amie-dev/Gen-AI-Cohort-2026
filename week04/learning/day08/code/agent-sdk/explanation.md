@@ -1,6 +1,6 @@
 Yes. The easiest way to understand this code is to see it as a **small custom Agent framework**.
 
-There are really only **2 important files**:
+There are really only **2 important files**: 
 
 * `agent.ts` → builds the **Agent engine**
 * `index.ts` → creates an agent, gives it tools, and runs it
