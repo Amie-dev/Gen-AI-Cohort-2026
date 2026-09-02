@@ -1,0 +1,194 @@
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String      @id @default(cuid())
+  name          String
+  email         String      @unique
+  emailVerified Boolean     @default(false)
+  image         String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  sessions      Session[]
+  accounts      Account[]
+  workspaces    Workspace[]
+
+  @@map("user")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("session")
+  @@index([userId])
+}
+
+model Account {
+  id                    String    @id @default(cuid())
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  issuer String
+
+  @@map("account")
+  @@unique([issuer, accountId], map: "account_issuer_accountId_uidx")
+  @@index([userId])
+}
+
+model Verification {
+  id         String    @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime? @default(now())
+  updatedAt  DateTime? @updatedAt
+
+  @@map("verification")
+  @@index([identifier])
+}
+
+model Workspace {
+  id            String             @id @default(cuid())
+  name          String
+  userId        String
+  user          User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sources       Source[]
+  conversations Conversation[]
+  artifacts     LearningArtifact[]
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  @@map("workspace")
+}
+
+enum SourceType {
+  TEXT
+  MARKDOWN
+  WEBSITE
+  YOUTUBE
+  PDF
+  WEB_SEARCH
+}
+
+enum SourceStatus {
+  PENDING
+  PROCESSING
+  READY
+  FAILED
+}
+
+model Source {
+  id           String        @id @default(cuid())
+  workspaceId  String
+  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  title        String
+  type         SourceType
+  content      String?       @db.Text
+  url          String?
+  fileKey      String?
+  status       SourceStatus  @default(PENDING)
+  errorMessage String?
+  chunks       SourceChunk[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@map("source")
+}
+
+model SourceChunk {
+  id         String   @id @default(cuid())
+  sourceId   String
+  source     Source   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  chunkIndex Int
+  content    String   @db.Text
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@map("source_chunk")
+}
+
+model Conversation {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  title       String
+  summary     String?   @db.Text
+  messages    Message[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@map("conversation")
+}
+
+enum MessageRole {
+  user
+  assistant
+  system
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           MessageRole
+  content        String       @db.Text
+  citations      Json?
+  createdAt      DateTime     @default(now())
+
+  @@map("message")
+}
+
+enum ArtifactType {
+  SUMMARY
+  QUIZ
+  FLASHCARDS
+  STUDY_GUIDE
+  AUDIO_OVERVIEW
+}
+
+enum ArtifactStatus {
+  PENDING
+  GENERATING
+  READY
+  FAILED
+}
+
+model LearningArtifact {
+  id          String         @id @default(cuid())
+  workspaceId String
+  workspace   Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  type        ArtifactType
+  title       String
+  content     Json?
+  status      ArtifactStatus @default(PENDING)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@map("learning_artifact")
+}
