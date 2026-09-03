@@ -1,69 +1,61 @@
-# Chaibook LLM Sir — Step-by-Step Implementation Guide
+# Chaibook LLM Sir — Step-by-Step Implementation Guides
 
-Welcome to the comprehensive, chapter-by-chapter implementation guide for building **Chaibook LLM Sir**, an AI-powered Notebook and RAG Knowledge management platform built with Express (Node.js/TypeScript) backend and Next.js 16 (React 19/TypeScript) frontend.
+Welcome to **Chaibook LLM Sir**! This repository is an enterprise-grade AI Notebook and RAG (Retrieval-Augmented Generation) application built with Node.js, Express, PostgreSQL, Prisma ORM, Better Auth, Pinecone Vector DB, Inngest, Next.js 16 (App Router), React 19, and Tailwind CSS v4.
 
----
-
-## 📚 Table of Contents
-
-| Chapter | Title | Focus Area | Guide Link |
-| --- | --- | --- | --- |
-| **Ch 0** | **Overview & Setup** | System architecture, prerequisites, Docker Compose & installation commands | [chapter-00-overview-setup.md](file:///home/aminul/development/gen-ai-cohort/week05/chaibook-llm-sir/implementations%20guide/chapter-00-overview-setup.md) |
-| **Ch 1** | **Project Bootstrap** | Express TS ESM server, Next.js client, CORS, dev scripts & health checks | [chapter-01-bootstrap.md](file:///home/aminul/development/gen-ai-cohort/week05/chaibook-llm-sir/implementations%20guide/chapter-01-bootstrap.md) |
-| **Ch 2** | **Database Foundation** | PostgreSQL pgvector, Prisma ORM schema, migrations, singleton connection | [chapter-02-database.md](file:///home/aminul/development/gen-ai-cohort/week05/chaibook-llm-sir/implementations%20guide/chapter-02-database.md) |
-| **Ch 3** | **Authentication** | Better Auth integration, Google OAuth 2.0, Prisma adapter & session middleware | [chapter-03-authentication.md](file:///home/aminul/development/gen-ai-cohort/week05/chaibook-llm-sir/implementations%20guide/chapter-03-authentication.md) |
-| **Ch 4** | **Workspaces CRUD** | Enterprise architecture (Route → Controller → Service → Repository), Zod & error handlers | [chapter-04-workspaces.md](file:///home/aminul/development/gen-ai-cohort/week05/chaibook-llm-sir/implementations%20guide/chapter-04-workspaces.md) |
-| **Ch 5** | **Knowledge Sources CRUD** | Text & Markdown notes management, `PENDING` initial status & bulk operations | [chapter-05-sources-crud.md](file:///home/aminul/development/gen-ai-cohort/week05/chaibook-llm-sir/implementations%20guide/chapter-05-sources-crud.md) |
-| **Ch 6** | **Source Import Channels** | Firecrawl web scraping, YouTube transcripts, Multer + Cloudinary PDF upload | [chapter-06-import-channels.md](file:///home/aminul/development/gen-ai-cohort/week05/chaibook-llm-sir/implementations%20guide/chapter-06-import-channels.md) |
-| **Ch 7** | **Indexing & Vector Pipeline** | Text chunking, OpenAI embeddings, Pinecone vector storage & Inngest queues | [chapter-07-indexing-pipeline.md](file:///home/aminul/development/gen-ai-cohort/week05/chaibook-llm-sir/implementations%20guide/chapter-07-indexing-pipeline.md) |
-| **Ch 8** | **RAG Conversations & Chat** | Pinecone vector search, inline source citations `[1]`, Vercel AI SDK stream | [chapter-08-rag-chat.md](file:///home/aminul/development/gen-ai-cohort/week05/chaibook-llm-sir/implementations%20guide/chapter-08-rag-chat.md) |
-| **Ch 9** | **Memory & Web Search** | Mem0 personal user memory, Tavily live web search & conversation summaries | [chapter-09-memory-search.md](file:///home/aminul/development/gen-ai-cohort/week05/chaibook-llm-sir/implementations%20guide/chapter-09-memory-search.md) |
-| **Ch 10** | **Async Learning Artifacts** | Background flashcard decks, quizzes, study guides & client interactive UI | [chapter-10-learning-artifacts.md](file:///home/aminul/development/gen-ai-cohort/week05/chaibook-llm-sir/implementations%20guide/chapter-10-learning-artifacts.md) |
+To make building and learning as clear as possible, the step-by-step guides are organized into two dedicated track subdirectories:
 
 ---
 
-## ⚡ Quick Start Command Sequence
+## 🧭 Choose Your Track
 
-### 1. Launch PostgreSQL Container
+### 🖥️ 1. Server Track (`implementations guide/server/`)
+If you are building or studying the backend API, start with the **[Server Track Guide](server/README.md)**.
+- **Location**: `week05/chaibook-llm-sir/implementations guide/server/`
+- **Contains**: Dedicated chapters 00 to 10 covering Express TS ESM, PostgreSQL pgvector setup, Prisma schema, Better Auth session middleware, 5-layer Workspaces CRUD, Firecrawl web scraper, YouTube transcript extractor, Cloudinary PDF uploads, sliding window text chunker, OpenAI embeddings, Pinecone vector upsert, Inngest background jobs, RAG similarity retrieval, streaming SSE AI chat, Mem0 personal memory, Tavily web search, and structured learning artifact generation.
+
+### 💻 2. Client Track (`implementations guide/client/`)
+If you are building or studying the frontend application, start with the **[Client Track Guide](client/README.md)**.
+- **Location**: `week05/chaibook-llm-sir/implementations guide/client/`
+- **Contains**: Dedicated chapters 00 to 10 covering Next.js 16 App Router, Tailwind CSS v4 setup, API proxy rewrites, shared `apiFetch` client, TanStack Query provider, Better Auth React client, Workspaces Dashboard UI, Source Library UI, Website/YouTube/PDF upload dialogs, source status badges with live polling, streaming AI chat UI with Streamdown renderer, interactive citation tooltips, personal memory settings, and interactive study viewers (Flashcards, Quizzes, Summaries).
+
+---
+
+## 📚 Master Chapter Reference Table
+
+| Chapter | Focus Area | Server Track Guide | Client Track Guide |
+| :--- | :--- | :--- | :--- |
+| **Ch 0** | **Overview & Setup** | [Server Ch 0](server/chapter-00-overview-setup.md) | [Client Ch 0](client/chapter-00-overview-setup.md) |
+| **Ch 1** | **Project Bootstrap** | [Server Ch 1](server/chapter-01-bootstrap.md) | [Client Ch 1](client/chapter-01-bootstrap.md) |
+| **Ch 2** | **Database Foundation** | [Server Ch 2](server/chapter-02-database.md) | [Client Ch 2](client/chapter-02-database.md) |
+| **Ch 3** | **Authentication** | [Server Ch 3](server/chapter-03-authentication.md) | [Client Ch 3](client/chapter-03-authentication.md) |
+| **Ch 4** | **Workspaces CRUD** | [Server Ch 4](server/chapter-04-workspaces.md) | [Client Ch 4](client/chapter-04-workspaces.md) |
+| **Ch 5** | **Knowledge Sources CRUD** | [Server Ch 5](server/chapter-05-sources-crud.md) | [Client Ch 5](client/chapter-05-sources-crud.md) |
+| **Ch 6** | **Source Import Channels** | [Server Ch 6](server/chapter-06-import-channels.md) | [Client Ch 6](client/chapter-06-import-channels.md) |
+| **Ch 7** | **Indexing & Vector Pipeline** | [Server Ch 7](server/chapter-07-indexing-pipeline.md) | [Client Ch 7](client/chapter-07-indexing-pipeline.md) |
+| **Ch 8** | **RAG Conversations & Chat** | [Server Ch 8](server/chapter-08-rag-chat.md) | [Client Ch 8](client/chapter-08-rag-chat.md) |
+| **Ch 9** | **Memory & Web Search** | [Server Ch 9](server/chapter-09-memory-search.md) | [Client Ch 9](client/chapter-09-memory-search.md) |
+| **Ch 10** | **Async Learning Artifacts** | [Server Ch 10](server/chapter-10-learning-artifacts.md) | [Client Ch 10](client/chapter-10-learning-artifacts.md) |
+
+---
+
+## ⚡ Quick Start Sequence
+
 ```bash
+# 1. Launch PostgreSQL Vector DB Container
 cd week05/chaibook-llm-sir
 docker compose up -d
-```
 
-### 2. Setup Backend Server (`server/`)
-```bash
+# 2. Run Express Server API (Port 8080)
 cd week05/chaibook-llm-sir/server
 npm install
 npx prisma migrate dev
 npm run dev
-```
 
-### 3. Setup Frontend Client (`client/`)
-```bash
+# 3. Run Next.js Client App (Port 3000)
 cd week05/chaibook-llm-sir/client
 npm install
 npm run dev
-```
 
-### 4. Start Inngest Background Worker Engine
-```bash
+# 4. Start Inngest Background Worker Engine
 npx inngest-cli@latest dev -u http://localhost:8080/api/inngest
-```
-
----
-
-## 🏗️ System Build Order Dependency Graph
-
-```
-Ch0 Setup & Prerequisites
- └─ Ch1 Bootstrap (Express + Next.js)
-     └─ Ch2 Database (Postgres pgvector + Prisma)
-         └─ Ch3 Auth (Better Auth + Google OAuth)
-             └─ Ch4 Workspaces (Enterprise 5-Layer Pattern)
-                 └─ Ch5 Sources CRUD (Text & Markdown Notes)
-                     └─ Ch6 Import Channels (Firecrawl / YouTube / Cloudinary)
-                         └─ Ch7 Indexing Pipeline (Unpdf + OpenAI + Pinecone + Inngest)
-                             ├─ Ch8 RAG Chat (Pinecone Search + Vercel AI Stream)
-                             ├─ Ch9 Memory + Web Search (Mem0 + Tavily)
-                             └─ Ch10 Learning Artifacts (Flashcards + Quizzes + Summaries)
 ```

@@ -1,22 +1,18 @@
-# Master Chapter 7 — 07 Indexing Pipeline
+# Server Chapter 7 — Inngest Indexing & Pinecone Vector Pipeline
 
-## 1. Chapter Overview & Goal
-- **Server Goal**: Implement background event-driven source processing jobs using Inngest, OpenAI text embeddings, and Pinecone vector database upserts.
-- **Client Goal**: Integrate real-time background status polling for knowledge sources transitioning from PENDING -> PROCESSING -> INDEXED / FAILED.
-- **Combined Outcome**: Build end-to-end full-stack functionality connecting the Express server API with the Next.js client UI.
+## 1. Goal & Outcome
+- **Goal**: Implement background event-driven source processing jobs using Inngest, OpenAI text embeddings, and Pinecone vector database upserts.
+- **Student Outcome**: Automated, scalable background worker system for text chunking, embedding generation, and vector index synchronization.
 
 ---
 
-## 2. Quick Setup Commands
+## 2. Server Installation Commands
+
+From directory `week05/chaibook-llm-sir/server`:
 
 ```bash
-# 1. Server Dependencies
 cd week05/chaibook-llm-sir/server
 npm install inngest openai @pinecone-database/pinecone
-
-# 2. Client Dependencies
-cd week05/chaibook-llm-sir/client
-npm install @tanstack/react-query lucide-react
 ```
 
 ---
@@ -943,14 +939,3 @@ export { indexName as PINECONE_INDEX_NAME };
 
 **Summary of Integration & Execution Safeguards:**
 - Formatted with strict error handling, explicit type assertions, and modular design patterns across all 187 lines of `pinecone.ts`.
-
----
-
-## 4. Client Source Code & Explanations
-
----
-
-## 5. Verification & Testing Steps
-1. Ensure backend Express server is running on port 8080 (`npm run dev` in `server`).
-2. Ensure frontend Next.js app is running on port 3000 (`npm run dev` in `client`).
-3. Verify API proxy routing and test features covered in Chapter 7.

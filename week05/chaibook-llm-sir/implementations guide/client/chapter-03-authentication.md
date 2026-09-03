@@ -1,171 +1,23 @@
-# Master Chapter 3 — 03 Authentication
+# Client Chapter 3 — Better Auth Client & Authentication UI
 
-## 1. Chapter Overview & Goal
-- **Server Goal**: Implement secure authentication and session validation using Better Auth and Express middleware.
-- **Client Goal**: Implement authentication client, session hooks, route protection utilities, login form UI, and auth layout.
-- **Combined Outcome**: Build end-to-end full-stack functionality connecting the Express server API with the Next.js client UI.
+## 1. Goal & Outcome
+- **Goal**: Implement authentication client, session hooks, route protection utilities, login form UI, and auth layout.
+- **Student Outcome**: Secure client-side authentication with session persistence, auto-redirects, login card, and sign-out controls.
 
 ---
 
-## 2. Quick Setup Commands
+## 2. Client Installation Commands
+
+From directory `week05/chaibook-llm-sir/client`:
 
 ```bash
-# 1. Server Dependencies
-cd week05/chaibook-llm-sir/server
-npm install better-auth
-
-# 2. Client Dependencies
 cd week05/chaibook-llm-sir/client
 npm install better-auth react-hook-form @hookform/resolvers zod
 ```
 
 ---
 
-## 3. Server Source Code & Explanations
-
-#### File Path: `server/src/lib/auth.ts`
-
-```typescript
-/**
- * Better Auth server configuration.
- *
- * Handles Google OAuth and session persistence via Prisma/PostgreSQL.
- * The client authenticates against routes mounted from this `auth` instance.
- *
- * Required env vars: `BETTER_AUTH_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
- * Optional: `BETTER_AUTH_URL`, `CLIENT_URL`
- */
-
-import { betterAuth } from "better-auth";
-import { prismaAdapter } from "better-auth/adapters/prisma";
-import prisma from "./db.js";
-
-const clientUrl = process.env.CLIENT_URL ?? "http://localhost:3000";
-
-/**
- * Configured Better Auth instance shared by Express route handlers.
- *
- */
-export const auth = betterAuth({
-    baseURL: process.env.BETTER_AUTH_URL ?? clientUrl,
-    secret: process.env.BETTER_AUTH_SECRET,
-    trustedOrigins: [clientUrl],
-    database: prismaAdapter(prisma, {
-        provider: "postgresql",
-    }),
-    socialProviders: {
-        google: {
-            clientId: process.env.GOOGLE_CLIENT_ID!,
-            clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-        },
-    },
-});
-
-```
-
-#### Code Explanation: `server/src/lib/auth.ts`
-
-**Overview & Architectural Role:**
-- `server/src/lib/auth.ts` is a production source module containing **34 lines** of code.
-
-**Detailed Line-by-Line & Block-by-Block Breakdown:**
-- **Imports & Dependencies (Lines 1 to 5)**:
-  - `import { betterAuth } from "better-auth";`: Imports required module bindings.
-  - `import { prismaAdapter } from "better-auth/adapters/prisma";`: Imports required module bindings.
-  - `import prisma from "./db.js";`: Imports required module bindings.
-- **Constants & Exported Utilities**:
-  - `export const auth = betterAuth({`: Exposes constant values and helper variables across the application.
-
-**Summary of Integration & Execution Safeguards:**
-- Formatted with strict error handling, explicit type assertions, and modular design patterns across all 34 lines of `auth.ts`.
-
-#### File Path: `server/src/lib/session.ts`
-
-```typescript
-/**
- * Session type inferred from the Better Auth configuration.
- *
- * Use this type when typing Express request handlers that access `req.session`.
- */
-
-import type { auth } from "../lib/auth.js";
-
-/**
- * Authenticated session shape including `user` and `session` metadata.
- *
- */
-export type Session = typeof auth.$Infer.Session;
-
-```
-
-#### Code Explanation: `server/src/lib/session.ts`
-
-**Overview & Architectural Role:**
-- `server/src/lib/session.ts` is a production source module containing **13 lines** of code.
-
-**Detailed Line-by-Line & Block-by-Block Breakdown:**
-- **Imports & Dependencies (Lines 1 to 3)**:
-  - `import type { auth } from "../lib/auth.js";`: Imports required module bindings.
-- **TypeScript Types & Interfaces**:
-  - **Line 13 (`export type Session = typeof auth.$Infer.Session;`)**: Establishes strict static type contracts to enforce compile-time type safety.
-
-**Summary of Integration & Execution Safeguards:**
-- Formatted with strict error handling, explicit type assertions, and modular design patterns across all 13 lines of `session.ts`.
-
-#### File Path: `server/src/middleware/require-auth.middleware.ts`
-
-```typescript
-import type { NextFunction, Request, Response } from "express";
-import { fromNodeHeaders } from "better-auth/node";
-import { auth } from "../lib/auth.js";
-import type { Session } from "../lib/session.js";
-
-declare module "express-serve-static-core" {
-    interface Request {
-        session: Session;
-    }
-}
-
-export async function requireAuth(
-    req: Request,
-    res: Response,
-    next: NextFunction,
-): Promise<void> {
-    const session = await auth.api.getSession({
-        headers: fromNodeHeaders(req.headers),
-    });
-
-    if (!session?.user) {
-        res.status(401).json({ error: "Unauthorized" });
-        return;
-    }
-
-    req.session = session;
-    next();
-}
-
-```
-
-#### Code Explanation: `server/src/middleware/require-auth.middleware.ts`
-
-**Overview & Architectural Role:**
-- `server/src/middleware/require-auth.middleware.ts` is a production source module containing **28 lines** of code.
-
-**Detailed Line-by-Line & Block-by-Block Breakdown:**
-- **Imports & Dependencies (Lines 1 to 6)**:
-  - `import type { NextFunction, Request, Response } from "express";`: Imports required module bindings.
-  - `import { fromNodeHeaders } from "better-auth/node";`: Imports required module bindings.
-  - `import { auth } from "../lib/auth.js";`: Imports required module bindings.
-  - `import type { Session } from "../lib/session.js";`: Imports required module bindings.
-- **TypeScript Types & Interfaces**:
-  - **Line 7 (`interface Request {`)**: Establishes strict static type contracts to enforce compile-time type safety.
-
-**Summary of Integration & Execution Safeguards:**
-- Formatted with strict error handling, explicit type assertions, and modular design patterns across all 28 lines of `require-auth.middleware.ts`.
-
----
-
-## 4. Client Source Code & Explanations
+## 3. Client Source Code & Explanations
 
 #### File Path: `client/features/auth/lib/auth-client.ts`
 
@@ -719,10 +571,3 @@ export default async function LoginPage() {
 
 **Summary of Integration & Execution Safeguards:**
 - Formatted with strict error handling, explicit type assertions, and modular design patterns across all 12 lines of `page.tsx`.
-
----
-
-## 5. Verification & Testing Steps
-1. Ensure backend Express server is running on port 8080 (`npm run dev` in `server`).
-2. Ensure frontend Next.js app is running on port 3000 (`npm run dev` in `client`).
-3. Verify API proxy routing and test features covered in Chapter 3.
