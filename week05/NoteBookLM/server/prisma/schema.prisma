@@ -8,25 +8,27 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+
 model User {
-  id            String      @id @default(cuid())
+  id            String    @id
   name          String
-  email         String      @unique
-  emailVerified Boolean     @default(false)
+  email         String
+  emailVerified Boolean   @default(false)
   image         String?
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
   sessions      Session[]
   accounts      Account[]
-  workspaces    Workspace[]
+  workspaces   Workspace[]
 
+  @@unique([email])
   @@map("user")
 }
 
 model Session {
-  id        String   @id @default(cuid())
+  id        String   @id
   expiresAt DateTime
-  token     String   @unique
+  token     String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   ipAddress String?
@@ -34,12 +36,13 @@ model Session {
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@map("session")
+  @@unique([token])
   @@index([userId])
+  @@map("session")
 }
 
 model Account {
-  id                    String    @id @default(cuid())
+  id                    String    @id
   accountId             String
   providerId            String
   userId                String
@@ -54,46 +57,46 @@ model Account {
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
-  issuer String
-
-  @@map("account")
-  @@unique([issuer, accountId], map: "account_issuer_accountId_uidx")
   @@index([userId])
+  @@map("account")
 }
 
 model Verification {
-  id         String    @id @default(cuid())
+  id         String   @id
   identifier String
   value      String
   expiresAt  DateTime
-  createdAt  DateTime? @default(now())
-  updatedAt  DateTime? @updatedAt
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
-  @@map("verification")
   @@index([identifier])
+  @@map("verification")
 }
 
 model Workspace {
-  id            String             @id @default(cuid())
-  name          String
+  id            String         @id @default(cuid())
   userId        String
-  user          User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  sources       Source[]
-  conversations Conversation[]
-  artifacts     LearningArtifact[]
-  createdAt     DateTime           @default(now())
-  updatedAt     DateTime           @updatedAt
+  title         String
+  description   String?
+  icon          String?
+  defaultModel  String         @default("gpt-4o-mini")
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sources   Source[]
+   conversations Conversation[]
+   artifacts  LearningArtifact[]
 
+  @@index([userId])
   @@map("workspace")
 }
 
 enum SourceType {
-  TEXT
-  MARKDOWN
+  PDF
   WEBSITE
   YOUTUBE
-  PDF
-  WEB_SEARCH
+  TEXT
+  MARKDOWN
 }
 
 enum SourceStatus {
@@ -104,77 +107,90 @@ enum SourceStatus {
 }
 
 model Source {
-  id           String        @id @default(cuid())
-  workspaceId  String
-  workspace    Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  title        String
-  type         SourceType
-  content      String?       @db.Text
-  url          String?
-  fileKey      String?
-  status       SourceStatus  @default(PENDING)
-  errorMessage String?
-  chunks       SourceChunk[]
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  id          String       @id @default(cuid())
+  workspaceId String
+  type        SourceType
+  title       String
+  content     String?
+  url         String?
+  status      SourceStatus @default(PENDING)
+  metadata    Json?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  chunks      SourceChunk[]
 
+  @@index([workspaceId])
+  @@index([workspaceId, type])
+  @@index([workspaceId, status])
   @@map("source")
 }
 
 model SourceChunk {
   id         String   @id @default(cuid())
   sourceId   String
-  source     Source   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
-  chunkIndex Int
-  content    String   @db.Text
+  index      Int
+  content    String
+  tokenCount Int?
   metadata   Json?
   createdAt  DateTime @default(now())
+  source     Source   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
 
+  @@unique([sourceId, index])
+  @@index([sourceId])
   @@map("source_chunk")
 }
 
-model Conversation {
-  id          String    @id @default(cuid())
-  workspaceId String
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  title       String
-  summary     String?   @db.Text
-  messages    Message[]
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-
-  @@map("conversation")
-}
 
 enum MessageRole {
-  user
-  assistant
-  system
+  USER
+  ASSISTANT
+}
+
+
+model Conversation {
+  id                   String    @id @default(cuid())
+  workspaceId          String
+  title                String?
+  summary              String?
+  summaryMessageCount  Int       @default(0)
+  summarizedAt         DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  workspace            Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  messages             Message[]
+
+  @@index([workspaceId])
+  @@index([workspaceId, updatedAt])
+  @@map("conversation")
 }
 
 model Message {
   id             String       @id @default(cuid())
   conversationId String
-  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   role           MessageRole
-  content        String       @db.Text
+  content        String
   citations      Json?
   createdAt      DateTime     @default(now())
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
+  @@index([conversationId])
+  @@index([conversationId, createdAt])
   @@map("message")
 }
 
 enum ArtifactType {
   SUMMARY
-  QUIZ
+  TAKEAWAYS
   FLASHCARDS
-  STUDY_GUIDE
-  AUDIO_OVERVIEW
+  QUIZ
+  MINDMAP
+  REPORT
 }
 
 enum ArtifactStatus {
   PENDING
-  GENERATING
+  PROCESSING
   READY
   FAILED
 }
@@ -182,13 +198,18 @@ enum ArtifactStatus {
 model LearningArtifact {
   id          String         @id @default(cuid())
   workspaceId String
-  workspace   Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   type        ArtifactType
   title       String
   content     Json?
+  sourceIds   String[]
   status      ArtifactStatus @default(PENDING)
+  metadata    Json?
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
+  workspace   Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
+  @@index([workspaceId])
+  @@index([workspaceId, type])
+  @@index([workspaceId, status])
   @@map("learning_artifact")
 }

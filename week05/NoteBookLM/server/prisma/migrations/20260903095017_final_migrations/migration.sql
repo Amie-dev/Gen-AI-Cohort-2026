@@ -1,17 +1,17 @@
 -- CreateEnum
-CREATE TYPE "SourceType" AS ENUM ('TEXT', 'MARKDOWN', 'WEBSITE', 'YOUTUBE', 'PDF', 'WEB_SEARCH');
+CREATE TYPE "SourceType" AS ENUM ('PDF', 'WEBSITE', 'YOUTUBE', 'TEXT', 'MARKDOWN');
 
 -- CreateEnum
 CREATE TYPE "SourceStatus" AS ENUM ('PENDING', 'PROCESSING', 'READY', 'FAILED');
 
 -- CreateEnum
-CREATE TYPE "MessageRole" AS ENUM ('user', 'assistant', 'system');
+CREATE TYPE "MessageRole" AS ENUM ('USER', 'ASSISTANT');
 
 -- CreateEnum
-CREATE TYPE "ArtifactType" AS ENUM ('SUMMARY', 'QUIZ', 'FLASHCARDS', 'STUDY_GUIDE', 'AUDIO_OVERVIEW');
+CREATE TYPE "ArtifactType" AS ENUM ('SUMMARY', 'TAKEAWAYS', 'FLASHCARDS', 'QUIZ', 'MINDMAP', 'REPORT');
 
 -- CreateEnum
-CREATE TYPE "ArtifactStatus" AS ENUM ('PENDING', 'GENERATING', 'READY', 'FAILED');
+CREATE TYPE "ArtifactStatus" AS ENUM ('PENDING', 'PROCESSING', 'READY', 'FAILED');
 
 -- CreateTable
 CREATE TABLE "user" (
@@ -65,8 +65,8 @@ CREATE TABLE "verification" (
     "identifier" TEXT NOT NULL,
     "value" TEXT NOT NULL,
     "expiresAt" TIMESTAMP(3) NOT NULL,
-    "createdAt" TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "verification_pkey" PRIMARY KEY ("id")
 );
@@ -74,8 +74,11 @@ CREATE TABLE "verification" (
 -- CreateTable
 CREATE TABLE "workspace" (
     "id" TEXT NOT NULL,
-    "name" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
+    "title" TEXT NOT NULL,
+    "description" TEXT,
+    "icon" TEXT,
+    "defaultModel" TEXT NOT NULL DEFAULT 'gpt-4o-mini',
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -86,13 +89,12 @@ CREATE TABLE "workspace" (
 CREATE TABLE "source" (
     "id" TEXT NOT NULL,
     "workspaceId" TEXT NOT NULL,
-    "title" TEXT NOT NULL,
     "type" "SourceType" NOT NULL,
+    "title" TEXT NOT NULL,
     "content" TEXT,
     "url" TEXT,
-    "fileKey" TEXT,
     "status" "SourceStatus" NOT NULL DEFAULT 'PENDING',
-    "errorMessage" TEXT,
+    "metadata" JSONB,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -103,8 +105,9 @@ CREATE TABLE "source" (
 CREATE TABLE "source_chunk" (
     "id" TEXT NOT NULL,
     "sourceId" TEXT NOT NULL,
-    "chunkIndex" INTEGER NOT NULL,
+    "index" INTEGER NOT NULL,
     "content" TEXT NOT NULL,
+    "tokenCount" INTEGER,
     "metadata" JSONB,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -115,8 +118,10 @@ CREATE TABLE "source_chunk" (
 CREATE TABLE "conversation" (
     "id" TEXT NOT NULL,
     "workspaceId" TEXT NOT NULL,
-    "title" TEXT NOT NULL,
+    "title" TEXT,
     "summary" TEXT,
+    "summaryMessageCount" INTEGER NOT NULL DEFAULT 0,
+    "summarizedAt" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -142,7 +147,9 @@ CREATE TABLE "learning_artifact" (
     "type" "ArtifactType" NOT NULL,
     "title" TEXT NOT NULL,
     "content" JSONB,
+    "sourceIds" TEXT[],
     "status" "ArtifactStatus" NOT NULL DEFAULT 'PENDING',
+    "metadata" JSONB,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -153,7 +160,55 @@ CREATE TABLE "learning_artifact" (
 CREATE UNIQUE INDEX "user_email_key" ON "user"("email");
 
 -- CreateIndex
+CREATE INDEX "session_userId_idx" ON "session"("userId");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "session_token_key" ON "session"("token");
+
+-- CreateIndex
+CREATE INDEX "account_userId_idx" ON "account"("userId");
+
+-- CreateIndex
+CREATE INDEX "verification_identifier_idx" ON "verification"("identifier");
+
+-- CreateIndex
+CREATE INDEX "workspace_userId_idx" ON "workspace"("userId");
+
+-- CreateIndex
+CREATE INDEX "source_workspaceId_idx" ON "source"("workspaceId");
+
+-- CreateIndex
+CREATE INDEX "source_workspaceId_type_idx" ON "source"("workspaceId", "type");
+
+-- CreateIndex
+CREATE INDEX "source_workspaceId_status_idx" ON "source"("workspaceId", "status");
+
+-- CreateIndex
+CREATE INDEX "source_chunk_sourceId_idx" ON "source_chunk"("sourceId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "source_chunk_sourceId_index_key" ON "source_chunk"("sourceId", "index");
+
+-- CreateIndex
+CREATE INDEX "conversation_workspaceId_idx" ON "conversation"("workspaceId");
+
+-- CreateIndex
+CREATE INDEX "conversation_workspaceId_updatedAt_idx" ON "conversation"("workspaceId", "updatedAt");
+
+-- CreateIndex
+CREATE INDEX "message_conversationId_idx" ON "message"("conversationId");
+
+-- CreateIndex
+CREATE INDEX "message_conversationId_createdAt_idx" ON "message"("conversationId", "createdAt");
+
+-- CreateIndex
+CREATE INDEX "learning_artifact_workspaceId_idx" ON "learning_artifact"("workspaceId");
+
+-- CreateIndex
+CREATE INDEX "learning_artifact_workspaceId_type_idx" ON "learning_artifact"("workspaceId", "type");
+
+-- CreateIndex
+CREATE INDEX "learning_artifact_workspaceId_status_idx" ON "learning_artifact"("workspaceId", "status");
 
 -- AddForeignKey
 ALTER TABLE "session" ADD CONSTRAINT "session_userId_fkey" FOREIGN KEY ("userId") REFERENCES "user"("id") ON DELETE CASCADE ON UPDATE CASCADE;

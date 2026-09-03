@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono, JetBrains_Mono, Noto_Sans } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
+import { ThemeProvider } from "@/components/theme-provider"
+import QueryProvider from "@/components/provider/query-provider";
 
 const notoSansHeading = Noto_Sans({subsets:['latin'],variable:'--font-heading'});
 
@@ -24,11 +26,17 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html
+    <html suppressHydrationWarning
       lang="en"
       className={cn("h-full", "antialiased", geistSans.variable, geistMono.variable, "font-mono", jetbrainsMono.variable, notoSansHeading.variable)}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <ThemeProvider
+            attribute="class"
+            defaultTheme="system"
+            enableSystem
+            disableTransitionOnChange
+          ><QueryProvider>{children}</QueryProvider></ThemeProvider></body>
     </html>
   );
 }
