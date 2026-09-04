@@ -31,6 +31,187 @@ server/
 
 ---
 
+## 🏗 System Architecture & Service Ecosystem
+
+The server operates as a modular, event-driven Node.js ESM backend connecting multiple data storage engines, asynchronous job runners, and external AI models.
+
+```mermaid
+graph TD
+    subgraph Client["Client Tier"]
+        UI["Web App / Frontend Client"]
+    end
+
+    subgraph ServerApp["Node.js / Express Server (ESM API)"]
+        Routes["Express Routes & Router"]
+        AuthMid["Better Auth Middleware (requireAuth)"]
+        Controllers["Controllers & Zod Validators"]
+        Services["Business Logic & AI Services"]
+        Repos["Prisma Repositories"]
+    end
+
+    subgraph DatabaseTier["Data & Storage Tier"]
+        PG[("PostgreSQL\n(pgvector)")]
+        Pinecone[("Pinecone Vector DB")]
+        Cloudinary[("Cloudinary Media Storage")]
+    end
+
+    subgraph BackgroundTier["Background Engine"]
+        Inngest["Inngest Queue Worker"]
+    end
+
+    subgraph ExternalServices["AI & External Integrations"]
+        OpenAI["OpenAI API\n(Embeddings & LLM)"]
+        Mem0["Mem0 AI\n(User Memory)"]
+        Tavily["Tavily API\n(Live Web Search)"]
+        Firecrawl["Firecrawl API\n(Web Scraper)"]
+        YT["YouTube Transcript API"]
+    end
+
+    UI -->|"HTTP REST / SSE Stream"| Routes
+    Routes --> AuthMid
+    AuthMid --> Controllers
+    Controllers --> Services
+    Services --> Repos
+    Repos -->|"Prisma ORM"| PG
+
+    Services -->|"Dispatch Events"| Inngest
+    Inngest -->|"Async Execution"| Services
+
+    Services -->|"Embeddings & LLM Stream"| OpenAI
+    Services -->|"Vector Search"| Pinecone
+    Services -->|"User Memory"| Mem0
+    Services -->|"Live Web Search"| Tavily
+    Services -->|"Scrape Pages"| Firecrawl
+    Services -->|"Fetch Transcripts"| YT
+    Services -->|"PDF Storage"| Cloudinary
+
+    Inngest -->|"Generate Vectors"| OpenAI
+    Inngest -->|"Upsert Vectors"| Pinecone
+```
+
+---
+
+## 🔄 5-Layer Backend Architecture & Request Flow
+
+All API endpoints follow a strict, decoupled **5-Layer Architecture** (`Route` → `Validator` → `Controller` → `Service` → `Repository`).
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Client
+    participant Middleware as Auth Middleware
+    participant Route as Express Router
+    participant Validator as Zod Validator
+    participant Controller as Controller Layer
+    participant Service as Service Layer
+    participant Repo as Repository Layer
+    participant DB as PostgreSQL (Prisma)
+    participant Inngest as Inngest Event Queue
+
+    Client->>Route: HTTP Request (e.g. POST /api/sources)
+    Route->>Middleware: requireAuth() Validate Session Token
+    alt Invalid Session
+        Middleware-->>Client: 401 Unauthorized Response
+    else Valid Session
+        Middleware->>Validator: Pass Request Body & Params
+        Validator->>Validator: Validate Schema (Zod)
+        alt Validation Fails
+            Validator-->>Client: 400 Bad Request (Zod Error Format)
+        else Validation Passes
+            Validator->>Controller: Invokes Controller Handler
+            Controller->>Service: Call Business Logic Method
+            Service->>Repo: Perform DB Query
+            Repo->>DB: Execute SQL via Prisma Client
+            DB-->>Repo: Return Database Record
+            Repo-->>Service: Return Prisma Model Object
+            opt Event Trigger Needed
+                Service->>Inngest: Send Inngest Event (e.g. source.created)
+            end
+            Service-->>Controller: Return Business Result
+            Controller-->>Client: HTTP 200/201 JSON Response
+        end
+    end
+```
+
+---
+
+## ⚙️ Async Background Vector Indexing Pipeline
+
+When a user imports content (PDF, Web URL, YouTube video, or text note), processing occurs asynchronously using **Inngest** to maintain zero request blocking.
+
+```mermaid
+flowchart TD
+    Start(["Source Created (PDF / Web / YouTube / Text)"]) --> Event["Dispatch Event: source/created"]
+    Event --> InngestQueue["Inngest Background Job Received"]
+    
+    InngestQueue --> Step1["Step 1: Extract Content"]
+    Step1 --> Branch{Source Type?}
+    
+    Branch -->|PDF Document| PDFProc["Parse PDF via unpdf"]
+    Branch -->|Web Page URL| FirecrawlProc["Scrape Page via Firecrawl API"]
+    Branch -->|YouTube URL| YTProc["Fetch Transcript via youtube-transcript"]
+    Branch -->|Raw Note/Text| TextProc["Clean Text Content"]
+    
+    PDFProc --> Step2["Step 2: Text Chunking"]
+    FirecrawlProc --> Step2
+    YTProc --> Step2
+    TextProc --> Step2
+    
+    Step2 --> Chunking["Sliding Window Chunker\n(Chunk Size: 500-1000 tokens)"]
+    Chunking --> Step3["Step 3: Generate Vector Embeddings"]
+    Step3 --> OpenAIEmbed["Call OpenAI text-embedding-3-small"]
+    OpenAIEmbed --> EmbedVectors["Receive Vector Array (1536 dimensions)"]
+    
+    EmbedVectors --> Step4["Step 4: Vector DB Storage"]
+    Step4 --> PineconeUpsert["Upsert Vectors to Pinecone Index\n(Metadata: sourceId, workspaceId, text)"]
+    
+    PineconeUpsert --> Step5["Step 5: Status Update"]
+    Step5 --> DBUpdate["Update Prisma Source Record:\nStatus -> READY\nChunk Count -> N"]
+    DBUpdate --> Done(["Indexing Complete & Source Ready"])
+```
+
+---
+
+## 💬 RAG Chat Stream & User Memory Pipeline
+
+When a student queries the assistant, the server coordinates **Mem0** (long-term memory retrieval), **Pinecone** (workspace semantic context search), and **OpenAI** (LLM streaming with Server-Sent Events).
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as Student UI Client
+    participant Server as Express RAG Controller
+    participant Mem0 as Mem0 Memory SDK
+    participant OpenAI as OpenAI API (Embeddings)
+    participant Pinecone as Pinecone Vector DB
+    participant LLM as Vercel AI SDK / OpenAI GPT-4o
+
+    User->>Server: Send Chat Message (POST /api/workspaces/:id/chat)
+    
+    par Fetch User Memories & Generate Embeddings
+        Server->>Mem0: Query User Memories (mem0.search)
+        Mem0-->>Server: Stored Preferences & Past Insights
+    and Embedding Generation
+        Server->>OpenAI: Embed Query (text-embedding-3-small)
+        OpenAI-->>Server: Query Vector (1536-dim)
+    end
+    
+    Server->>Pinecone: Similarity Search (Top-K Chunks with workspaceId filter)
+    Pinecone-->>Server: Relevant Grounding Chunks with Citations
+    
+    Server->>Server: Assemble Augmented System Prompt\n(System Persona + User Memories + Retrieved Chunks)
+    
+    Server->>LLM: Stream LLM Completion (streamText)
+    LLM-->>Server: Server-Sent Events (SSE Stream)
+    Server-->>User: Stream Response Tokens & Citations [1][2] to UI
+    
+    opt Async Background Memory Update
+        Server-)Mem0: Extract & Store New Insights (mem0.add)
+    end
+```
+
+---
+
 ## 📚 Server Track Chapters
 
 | Chapter | Title | Focus & Core Components | Guide File |
@@ -65,3 +246,4 @@ npm run dev
 # 3. Start Inngest Worker Engine (in separate terminal)
 npx inngest-cli@latest dev -u http://localhost:8080/api/inngest
 ```
+
