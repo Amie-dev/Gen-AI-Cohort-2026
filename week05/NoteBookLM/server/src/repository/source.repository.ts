@@ -1,6 +1,6 @@
 import type { Prisma } from "../generated/prisma/client.js";
 import prisma from "../lib/db.js";
-import { ListSourcesQuery } from "../validators/source.validator.js";
+import type { ListSourcesQuery } from "../validators/source.validator.js";
 
 export const sourceSelect = {
     id: true,
@@ -15,6 +15,10 @@ export const sourceSelect = {
     updatedAt: true,
 } as const;
 
+export type SourceRecord = Prisma.SourceGetPayload<{
+    select: typeof sourceSelect;
+}>;
+
 export type CreateSourceData = {
     workspaceId: string;
     type: SourceRecord["type"];
@@ -24,27 +28,6 @@ export type CreateSourceData = {
     status?: SourceRecord["status"];
     metadata?: Prisma.InputJsonValue;
 };
-
-export type SourceRecord = Prisma.SourceGetPayload<{
-    select: typeof sourceSelect;
-}>;
-
-
-export function createSourceRecord(data: CreateSourceData) {
-    return prisma.source.create({
-        data: {
-            workspaceId: data.workspaceId,
-            type: data.type,
-            title: data.title,
-            content: data.content ?? null,
-            url: data.url ?? null,
-            status: data.status ?? "PENDING",
-            metadata: data.metadata,
-        },
-        select: sourceSelect,
-    });
-}
-
 
 export function findSourcesByWorkspaceId(
     workspaceId: string,
@@ -84,12 +67,20 @@ export function findSourceByIdAndWorkspaceId(
     });
 }
 
-export async function deleteSourceRecord(sourceId: string) {
-    await prisma.source.delete({
-        where: { id: sourceId },
+export function createSourceRecord(data: CreateSourceData) {
+    return prisma.source.create({
+        data: {
+            workspaceId: data.workspaceId,
+            type: data.type,
+            title: data.title,
+            content: data.content ?? null,
+            url: data.url ?? null,
+            status: data.status ?? "PENDING",
+            metadata: data.metadata,
+        },
+        select: sourceSelect,
     });
 }
-
 
 export function findSourceById(sourceId: string) {
     return prisma.source.findUnique({
@@ -110,5 +101,11 @@ export function updateSourceRecord(
         where: { id: sourceId },
         data,
         select: sourceSelect,
+    });
+}
+
+export async function deleteSourceRecord(sourceId: string) {
+    await prisma.source.delete({
+        where: { id: sourceId },
     });
 }
