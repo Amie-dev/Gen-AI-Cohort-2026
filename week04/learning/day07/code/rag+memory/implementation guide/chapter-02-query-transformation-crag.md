@@ -40,45 +40,49 @@ rag+memory/src/rag/QueryTranslator.js
 ### Code
 
 ```javascript
-import { callLLM } from "../utils/llm.js";
+import { generateJSON } from "../utils/llm.js";
 
+/**
+ * QueryTranslator.js
+ * Pre-retrieval query translation engine executing:
+ *  1. Query Rewriting
+ *  2. Step-Back Prompting
+ *  3. Sub-Query Decomposition
+ *  4. HyDE (Hypothetical Document Generation)
+ */
 export class QueryTranslator {
+  /**
+   * Translate a single user query into multiple optimized retrieval representations
+   */
   async translateQuery(rawQuery) {
-    const [rewritten, stepBack, subQueriesRaw, hydeDocument] = await Promise.all([
-      this.rewriteQuery(rawQuery),
-      this.stepBackQuery(rawQuery),
-      this.decomposeSubQueries(rawQuery),
-      this.generateHyde(rawQuery),
-    ]);
+    const systemPrompt = `You are an expert Query Translator LLM for a production RAG system.
+Given a user query, output a JSON object with:
+- "rewritten": A clean, concise, keyword-rich search query.
+- "stepBack": A higher-level conceptual/background question.
+- "subQueries": An array of 2 distinct sub-questions targeting specific aspects.
+- "hydeDocument": A hypothetical paragraph answering the query (HyDE).`;
 
-    return {
-      original: rawQuery,
-      rewritten,
-      stepBack,
-      subQueries: subQueriesRaw,
-      hydeDocument,
-    };
-  }
+    const userPrompt = `User Query: "${rawQuery}"`;
 
-  async rewriteQuery(query) {
-    const sys = "You are a Query Rewriter. Rewrite the user query for optimal technical document vector search. Output ONLY the rewritten string.";
-    return await callLLM(sys, query, 0.2);
-  }
-
-  async stepBackQuery(query) {
-    const sys = "You are a Step-Back Prompting expert. Generate a higher-level abstract concept query related to the user input. Output ONLY the step-back query string.";
-    return await callLLM(sys, query, 0.2);
-  }
-
-  async decomposeSubQueries(query) {
-    const sys = "Decompose the user query into 2 distinct sub-queries. Output sub-queries separated by newlines.";
-    const resp = await callLLM(sys, query, 0.2);
-    return resp.split("\n").filter((q) => q.trim().length > 0);
-  }
-
-  async generateHyde(query) {
-    const sys = "You are an expert technical author. Write a hypothetical technical document passage that answers the user question in detail.";
-    return await callLLM(sys, query, 0.5);
+    try {
+      const translated = await generateJSON(systemPrompt, userPrompt);
+      return {
+        original: rawQuery,
+        rewritten: translated.rewritten || rawQuery,
+        stepBack: translated.stepBack || rawQuery,
+        subQueries: Array.isArray(translated.subQueries) ? translated.subQueries : [rawQuery],
+        hydeDocument: translated.hydeDocument || rawQuery,
+      };
+    } catch (err) {
+      console.warn(`[QueryTranslator Warning] Translation failed, using raw query fallback: ${err.message}`);
+      return {
+        original: rawQuery,
+        rewritten: rawQuery,
+        stepBack: rawQuery,
+        subQueries: [rawQuery],
+        hydeDocument: rawQuery,
+      };
+    }
   }
 }
 ```
@@ -98,34 +102,49 @@ rag+memory/src/rag/CRAG.js
 ### Code
 
 ```javascript
-import { callLLM } from "../utils/llm.js";
+import { generateJSON } from "../utils/llm.js";
 
+/**
+ * CRAG.js — Corrective RAG Evaluator
+ * Evaluates quality and groundedness of retrieved document context before generation.
+ */
 export class CRAG {
-  async evaluateContext(query, retrievedDocs, threshold = 6.5) {
-    if (!retrievedDocs || retrievedDocs.length === 0) {
-      return { score: 0, isSufficient: false, reasoning: "No documents retrieved." };
+  /**
+   * Evaluate context relevance against query
+   */
+  async evaluateContext(query, retrievedChunks, threshold = 6.0) {
+    if (!retrievedChunks || retrievedChunks.length === 0) {
+      return {
+        score: 0,
+        isSufficient: false,
+        reasoning: "No documents retrieved.",
+      };
     }
 
-    const docsText = retrievedDocs.map((d, i) => `[Doc ${i + 1}]: ${d.content}`).join("\n\n");
-    const systemPrompt = `You are a CRAG Evaluator. Rate the relevancy and groundedness of the retrieved documents for answering the user query on a scale of 0 to 10.
-Return JSON format: { "score": number, "reasoning": "string" }`;
+    const contextText = retrievedChunks.map((c) => `- ${c.title}: ${c.content}`).join("\n");
+    const systemPrompt = `You are a CRAG Evaluator for an Advanced RAG system.
+Assess if the provided retrieved context is relevant and sufficient to answer the user query.
+Return JSON:
+- "score": number between 0 and 10
+- "isSufficient": boolean (true if score >= 6)
+- "reasoning": concise explanation of assessment`;
 
-    const userPrompt = `Query: "${query}"\n\nRetrieved Documents:\n${docsText}`;
+    const userPrompt = `User Query: "${query}"\n\nRetrieved Context:\n${contextText}`;
 
     try {
-      const resp = await callLLM(systemPrompt, userPrompt, 0.1);
-      const parsed = JSON.parse(resp);
+      const evalResult = await generateJSON(systemPrompt, userPrompt);
+      const score = typeof evalResult.score === "number" ? evalResult.score : 8.0;
       return {
-        score: parsed.score,
-        isSufficient: parsed.score >= threshold,
-        reasoning: parsed.reasoning,
+        score,
+        isSufficient: score >= threshold,
+        reasoning: evalResult.reasoning || "Context contains relevant technical information.",
       };
-    } catch {
-      // Fallback evaluation
+    } catch (err) {
+      console.warn(`[CRAG Warning] Evaluation failed, defaulting to pass: ${err.message}`);
       return {
         score: 7.5,
         isSufficient: true,
-        reasoning: "Evaluation fallback score applied.",
+        reasoning: "Default evaluation pass fallback.",
       };
     }
   }

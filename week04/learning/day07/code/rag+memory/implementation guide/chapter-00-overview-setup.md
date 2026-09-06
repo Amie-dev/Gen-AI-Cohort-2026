@@ -50,6 +50,19 @@ cd week04/learning/day07/code/rag+memory
     "dev": "node --watch index.js",
     "dream": "node -e \"import { MemoryReflection } from './src/memory/MemoryReflection.js'; console.log('Running Memory Dreaming offline background job...');\""
   },
+  "keywords": [
+    "rag",
+    "vector-search",
+    "memory",
+    "short-term-memory",
+    "long-term-memory",
+    "crag",
+    "rrf",
+    "hyde",
+    "llm-agent"
+  ],
+  "author": "GenAI Cohort",
+  "license": "ISC",
   "dependencies": {
     "@google/genai": "^0.13.0",
     "dotenv": "^16.4.7",
@@ -61,20 +74,23 @@ cd week04/learning/day07/code/rag+memory
 ### Central Configuration (`src/config.js`)
 
 ```javascript
-import dotenv from 'dotenv';
+import dotenv from "dotenv";
 dotenv.config();
 
 export const config = {
-  openaiApiKey: process.env.OPENAI_API_KEY || '',
-  geminiApiKey: process.env.GEMINI_API_KEY || '',
-  rag: {
-    topK: parseInt(process.env.RAG_TOP_K || '3', 10),
-    rrfK: parseInt(process.env.RAG_RRF_K || '60', 10),
-    cragThreshold: parseFloat(process.env.RAG_CRAG_THRESHOLD || '6.5'),
-  },
+  llmProvider: process.env.LLM_PROVIDER || "openai",
+  embeddingProvider: process.env.EMBEDDING_PROVIDER || "openai",
+  openaiApiKey: process.env.OPENAI_API_KEY || "",
+  geminiApiKey: process.env.GEMINI_API_KEY || "",
+  groqApiKey: process.env.GROQ_API_KEY || "",
   memory: {
-    stmMaxTurns: parseInt(process.env.STM_MAX_TURNS || '5', 10),
-    ltmTopK: parseInt(process.env.LTM_TOP_K || '3', 10),
+    stmMaxTurns: parseInt(process.env.STM_MAX_TURNS || "6", 10),
+    ltmTopK: parseInt(process.env.LTM_TOP_K || "3", 10),
+  },
+  rag: {
+    topK: parseInt(process.env.RAG_TOP_K || "4", 10),
+    rrfK: parseInt(process.env.RRF_K || "60", 10),
+    cragThreshold: parseFloat(process.env.CRAG_THRESHOLD || "6.0"),
   },
 };
 ```
@@ -83,56 +99,78 @@ export const config = {
 
 ## 3. Vector Embeddings Utility (`src/utils/embeddings.js`)
 
-Generates 1536-dimensional float vectors for document indexing and semantic memory search:
+Generates float vectors for document indexing and semantic memory search:
 
 ```javascript
-import OpenAI from 'openai';
-import { config } from '../config.js';
+import OpenAI from "openai";
+import { config } from "../config.js";
 
-const openai = new OpenAI({ apiKey: config.openaiApiKey || 'dummy-key' });
+let openaiClient = null;
+if (config.openaiApiKey) {
+  openaiClient = new OpenAI({ apiKey: config.openaiApiKey });
+}
 
+/**
+ * Deterministic vector embedding fallback for offline / key-less runs
+ */
+function getDeterministicMockEmbedding(text, dimension = 16) {
+  const normText = text.toLowerCase().trim();
+  const vector = new Array(dimension).fill(0);
+  
+  for (let i = 0; i < normText.length; i++) {
+    const charCode = normText.charCodeAt(i);
+    const index = i % dimension;
+    vector[index] += Math.sin(charCode * (i + 1));
+  }
+
+  // Normalize to unit length
+  const magnitude = Math.sqrt(vector.reduce((sum, val) => sum + val * val, 0));
+  return magnitude === 0 ? vector : vector.map(v => v / magnitude);
+}
+
+/**
+ * Get vector embedding for a given text string
+ */
 export async function getEmbedding(text) {
-  if (!text || typeof text !== 'string') {
-    throw new Error('Input text for embedding must be a non-empty string.');
+  if (!text || typeof text !== "string") {
+    return new Array(16).fill(0);
   }
 
-  try {
-    const response = await openai.embeddings.create({
-      model: 'text-embedding-3-small',
-      input: text,
-    });
-    return response.data[0].embedding;
-  } catch (err) {
-    // Deterministic offline fallback embedding vector
-    return createSimulatedEmbedding(text);
+  if (openaiClient && config.embeddingProvider === "openai") {
+    try {
+      const response = await openaiClient.embeddings.create({
+        model: "text-embedding-3-small",
+        input: text,
+      });
+      return response.data[0].embedding;
+    } catch (err) {
+      console.warn(`[Embedding Warning] OpenAI API call failed, falling back to mock: ${err.message}`);
+    }
   }
+
+  return getDeterministicMockEmbedding(text);
 }
 
-function createSimulatedEmbedding(text) {
-  const dim = 1536;
-  const vector = new Array(dim).fill(0);
-  let hash = 0;
-  for (let i = 0; i < text.length; i++) {
-    hash = (hash << 5) - hash + text.charCodeAt(i);
-    hash |= 0;
-  }
-  for (let i = 0; i < dim; i++) {
-    vector[i] = Math.sin(hash + i) * 0.1;
-  }
-  return vector;
-}
-
+/**
+ * Compute Cosine Similarity between two vector arrays
+ */
 export function cosineSimilarity(vecA, vecB) {
+  if (!vecA || !vecB || vecA.length !== vecB.length) return 0;
+  
   let dotProduct = 0;
-  let normA = 0;
-  let normB = 0;
+  let magA = 0;
+  let magB = 0;
+
   for (let i = 0; i < vecA.length; i++) {
     dotProduct += vecA[i] * vecB[i];
-    normA += vecA[i] * vecA[i];
-    normB += vecB[i] * vecB[i];
+    magA += vecA[i] * vecA[i];
+    magB += vecB[i] * vecB[i];
   }
-  if (normA === 0 || normB === 0) return 0;
-  return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+
+  magA = Math.sqrt(magA);
+  magB = Math.sqrt(magB);
+
+  return magA && magB ? dotProduct / (magA * magB) : 0;
 }
 ```
 
@@ -143,25 +181,111 @@ export function cosineSimilarity(vecA, vecB) {
 Handles chat completions with fallback error resilience:
 
 ```javascript
-import OpenAI from 'openai';
-import { config } from '../config.js';
+import OpenAI from "openai";
+import { config } from "../config.js";
 
-const openai = new OpenAI({ apiKey: config.openaiApiKey || 'dummy-key' });
+let openaiClient = null;
+if (config.openaiApiKey) {
+  openaiClient = new OpenAI({ apiKey: config.openaiApiKey });
+}
 
-export async function callLLM(systemPrompt, userPrompt, temperature = 0.3) {
-  try {
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
+/**
+ * Smart Fallback LLM responses for offline execution
+ */
+function getMockLLMResponse(systemPrompt, userPrompt) {
+  const sysLower = systemPrompt.toLowerCase();
+  const userLower = userPrompt.toLowerCase();
+
+  // 1. Query Translator Mock
+  if (sysLower.includes("query translator") || sysLower.includes("query translation")) {
+    return JSON.stringify({
+      rewritten: userPrompt.replace(/(please|can you|tell me|i want to know)/gi, "").trim() + " detailed architecture",
+      stepBack: "What are the core concepts and fundamental mechanics related to this query?",
+      subQueries: [
+        `What is the primary definition of ${userPrompt.slice(0, 25)}?`,
+        `What are the production best practices for ${userPrompt.slice(0, 25)}?`
       ],
-      temperature,
+      hydeDocument: `Comprehensive technical documentation explaining ${userPrompt}. Key concepts include design patterns, state management, latency tuning, and fault tolerance.`
     });
-    return response.choices[0]?.message?.content || '';
+  }
+
+  // 2. Fact Extraction Mock
+  if (sysLower.includes("fact extraction") || sysLower.includes("extract facts")) {
+    const facts = [];
+    if (userLower.includes("my name is")) {
+      const match = userPrompt.match(/my name is ([a-zA-Z]+)/i);
+      if (match) facts.push({ fact: `User's name is ${match[1]}`, category: "personal" });
+    }
+    if (userLower.includes("prefer") || userLower.includes("love") || userLower.includes("like") || userLower.includes("favorite")) {
+      facts.push({ fact: `User preference: ${userPrompt}`, category: "preference" });
+    }
+    if (userLower.includes("work at") || userLower.includes("working on") || userLower.includes("developer")) {
+      facts.push({ fact: `User work/context: ${userPrompt}`, category: "professional" });
+    }
+    if (facts.length === 0) {
+      facts.push({ fact: `User discussed: ${userPrompt.slice(0, 40)}`, category: "general" });
+    }
+    return JSON.stringify({ extractedFacts: facts });
+  }
+
+  // 3. CRAG Evaluator Mock
+  if (sysLower.includes("crag") || sysLower.includes("evaluator")) {
+    return JSON.stringify({
+      score: 8.5,
+      isSufficient: true,
+      reasoning: "Retrieved context directly addresses the key technical entities and queries."
+    });
+  }
+
+  // 4. Memory Reflection Mock
+  if (sysLower.includes("reflection") || sysLower.includes("dreaming")) {
+    return JSON.stringify({
+      mergedFacts: [],
+      contradictionsResolved: [],
+      evictIds: []
+    });
+  }
+
+  // 5. General Generation Default Mock
+  return `Based on your query "${userPrompt}" and the retrieved knowledge context, here is a synthesized answer:
+The system integrates Short-Term Memory, Long-Term Fact Memory (Vector RAG), and Knowledge Base Document RAG to deliver accurate, personalized, and context-aware responses.`;
+}
+
+/**
+ * General LLM Generation Call
+ */
+export async function callLLM(systemPrompt, userPrompt, temperature = 0.2) {
+  if (openaiClient && config.llmProvider === "openai") {
+    try {
+      const response = await openaiClient.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt }
+        ],
+        temperature,
+      });
+      return response.choices[0].message.content;
+    } catch (err) {
+      console.warn(`[LLM Warning] OpenAI API call failed, using mock response: ${err.message}`);
+    }
+  }
+
+  return getMockLLMResponse(systemPrompt, userPrompt);
+}
+
+/**
+ * LLM Call returning parsed JSON
+ */
+export async function generateJSON(systemPrompt, userPrompt) {
+  const rawText = await callLLM(systemPrompt, userPrompt, 0.1);
+  try {
+    // Clean markdown code fence if present
+    const cleaned = rawText.replace(/```json/g, "").replace(/```/g, "").trim();
+    return JSON.parse(cleaned);
   } catch (err) {
-    // Offline simulation fallback
-    return `[Offline Completion] Synthesized answer for prompt: "${userPrompt.slice(0, 60)}..."`;
+    console.warn(`[JSON Parse Warning] Failed to parse JSON response, attempting fallback parse.`);
+    return JSON.parse(getMockLLMResponse(systemPrompt, userPrompt));
   }
 }
 ```

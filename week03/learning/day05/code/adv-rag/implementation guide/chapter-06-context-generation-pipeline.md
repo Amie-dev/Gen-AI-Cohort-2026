@@ -13,14 +13,22 @@ This layer connects all components created in Chapters 01–05 into a single, co
 Create [`src/generation/contextBuilder.js`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag/src/generation/contextBuilder.js):
 
 ```javascript
+/**
+ * Step 12: Context Construction
+ * Formats top ranked documents into a clean prompt context block with source headers.
+ */
 export function buildContext(documents) {
   if (!documents || documents.length === 0) {
-    return "No relevant context available.";
+    return "(No relevant documents retrieved)";
   }
 
   return documents
-    .map((doc, i) => `[Source ${i + 1}] (${doc.title} | Source: ${doc.source})\n${doc.text}`)
-    .join("\n\n---\n\n");
+    .map((doc, index) => {
+      const sourceInfo = doc.source ? ` (Source: ${doc.source})` : "";
+      const titleInfo = doc.title ? ` - ${doc.title}` : "";
+      return `[SOURCE ${index + 1}]${titleInfo}${sourceInfo}\n${doc.text.trim()}`;
+    })
+    .join("\n\n");
 }
 ```
 
@@ -36,29 +44,38 @@ import { config } from "../config.js";
 
 const openai = new OpenAI({ apiKey: config.openai.apiKey });
 
+/**
+ * Step 13: Grounded Answer Generation
+ * Generates an answer strictly grounded in the retrieved context.
+ */
 export async function generateAnswer(query, context) {
   try {
-    const res = await openai.chat.completions.create({
+    const completion = await openai.chat.completions.create({
       model: config.openai.chatModel,
       temperature: 0.2,
       messages: [
         {
           role: "system",
           content:
-            "You are an enterprise AI assistant. Answer the user's question accurately and concisely using ONLY the provided context. " +
-            "If the answer is not supported by the context, state clearly that information is missing. Cite source titles when applicable.",
+            "You are a production grounded assistant. " +
+            "Answer the user's question using ONLY the provided context.\n\n" +
+            "Rules:\n" +
+            "- Do not invent facts or extrapolate beyond provided context.\n" +
+            "- If context is insufficient to answer completely, state clearly what is missing.\n" +
+            "- Cite source numbers [SOURCE N] when referring to specific facts.\n" +
+            "- Be concise, direct, and professional.",
         },
         {
           role: "user",
-          content: `Context:\n${context}\n\nQuestion: ${query}`,
+          content: `Question:\n${query}\n\nContext:\n${context}`,
         },
       ],
     });
 
-    return res.choices[0]?.message?.content?.trim() || "Unable to generate answer.";
+    return completion.choices[0]?.message?.content?.trim() || "Unable to generate answer.";
   } catch (err) {
-    console.error("⚠️ Answer generation failed:", err.message);
-    return "An error occurred while generating the answer.";
+    console.error("⚠️ Grounded Generation error:", err.message);
+    return "Error generating response from LLM service.";
   }
 }
 ```
@@ -86,7 +103,7 @@ import { evaluateAnswer } from "../evaluation/crag.js";
 import { outputGuardrails } from "../guardrails/output.js";
 
 /**
- * Master Production RAG Orchestrator Pipeline
+ * Complete Master Production RAG Orchestrator Pipeline
  * Runs: Guard -> Understand -> Translate -> Route -> Retrieve -> Filter -> Fuse -> Re-rank -> Generate -> Evaluate -> Output Guard -> Answer
  */
 export async function productionRAG(userQuery, user = { id: "USER_123", tenantId: "default", accessLevel: 1 }) {
@@ -170,7 +187,7 @@ export async function productionRAG(userQuery, user = { id: "USER_123", tenantId
     if (evaluation.score >= 6) {
       console.log(`✅ CRAG Passed (Score ${evaluation.score} >= 6). Applying Output Guardrails...`);
       const finalAnswer = outputGuardrails(rawAnswer, piiMap, user);
-
+      
       return {
         success: true,
         answer: finalAnswer,

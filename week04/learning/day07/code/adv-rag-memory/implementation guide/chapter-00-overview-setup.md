@@ -54,6 +54,18 @@ cd week04/learning/day07/code/adv-rag-memory
     "dev": "node --watch index.js",
     "worker": "node -e \"import { runMemoryWorkerPass } from './src/memory/memoryWorker.js'; runMemoryWorkerPass();\""
   },
+  "keywords": [
+    "adv-rag",
+    "mem0",
+    "rag",
+    "memory",
+    "vllm",
+    "rrf",
+    "crag",
+    "hyde"
+  ],
+  "author": "GenAI Cohort",
+  "license": "ISC",
   "dependencies": {
     "@google/genai": "^0.13.0",
     "dotenv": "^16.4.7",
@@ -66,13 +78,16 @@ cd week04/learning/day07/code/adv-rag-memory
 ### `.env.example`
 
 ```env
-PORT=3000
+PORT=8000
+LLM_PROVIDER=openai
+EMBEDDING_PROVIDER=openai
 OPENAI_API_KEY=your-openai-api-key
 GEMINI_API_KEY=your-gemini-api-key
-MEM0_API_KEY=your-mem0-api-key
-POSTGRES_URL=postgresql://postgres:postgres@localhost:5432/adv_rag
-QDRANT_URL=http://localhost:6333
-REDIS_URL=redis://localhost:6379
+MEM0_TOP_K=3
+STM_MAX_TURNS=6
+RAG_TOP_K=5
+RRF_K=60
+CRAG_THRESHOLD=6.0
 ```
 
 ---
@@ -88,17 +103,24 @@ adv-rag-memory/src/config.js
 ### Code
 
 ```javascript
-import dotenv from 'dotenv';
+import dotenv from "dotenv";
 dotenv.config();
 
 export const config = {
-  port: process.env.PORT || 3000,
-  openaiApiKey: process.env.OPENAI_API_KEY || '',
-  geminiApiKey: process.env.GEMINI_API_KEY || '',
-  mem0ApiKey: process.env.MEM0_API_KEY || '',
-  postgresUrl: process.env.POSTGRES_URL || 'postgresql://postgres:postgres@localhost:5432/adv_rag',
-  qdrantUrl: process.env.QDRANT_URL || 'http://localhost:6333',
-  redisUrl: process.env.REDIS_URL || 'redis://localhost:6379',
+  port: parseInt(process.env.PORT || "8000", 10),
+  llmProvider: process.env.LLM_PROVIDER || "openai",
+  embeddingProvider: process.env.EMBEDDING_PROVIDER || "openai",
+  openaiApiKey: process.env.OPENAI_API_KEY || "",
+  geminiApiKey: process.env.GEMINI_API_KEY || "",
+  memory: {
+    mem0TopK: parseInt(process.env.MEM0_TOP_K || "3", 10),
+    stmMaxTurns: parseInt(process.env.STM_MAX_TURNS || "6", 10),
+  },
+  rag: {
+    topK: parseInt(process.env.RAG_TOP_K || "5", 10),
+    rrfK: parseInt(process.env.RRF_K || "60", 10),
+    cragThreshold: parseFloat(process.env.CRAG_THRESHOLD || "6.0"),
+  },
 };
 ```
 
@@ -111,17 +133,24 @@ export const config = {
 Provides client connection abstraction for relational data and metadata filtering:
 
 ```javascript
-import { config } from '../config.js';
+/**
+ * Infrastructure Connector: PostgreSQL Data Access Layer
+ * Provides relational query abstraction for Auth, Metadata, and DB records.
+ */
+export class PostgresConnector {
+  constructor() {
+    this.records = [
+      { id: "proj_101", userId: "user_aminul_101", title: "GenAI Production Stack", dbType: "PostgreSQL", tech: "TypeScript & Node.js" },
+      { id: "proj_102", userId: "user_aminul_101", title: "Vector Search Engine", dbType: "Qdrant", tech: "Python & vLLM" }
+    ];
+  }
 
-export async function getPostgresClient() {
-  console.log(`[DB] Connecting to PostgreSQL at ${config.postgresUrl}`);
-  return {
-    query: async (sql, params) => {
-      console.log(`[SQL EXEC] ${sql}`, params || '');
-      return { rows: [] };
-    },
-  };
+  async queryUserProjects(userId) {
+    return this.records.filter((r) => r.userId === userId);
+  }
 }
+
+export const postgresDb = new PostgresConnector();
 ```
 
 ### 2. Qdrant Vector Store Driver (`src/infrastructure/qdrant.js`)
@@ -129,17 +158,36 @@ export async function getPostgresClient() {
 Manages REST vector collection queries and embeddings search:
 
 ```javascript
-import { config } from '../config.js';
+/**
+ * Infrastructure Connector: Qdrant Vector DB Layer
+ * In-memory fallback and mock implementation of Qdrant Client.
+ */
+export class QdrantConnector {
+  constructor() {
+    this.collection = [];
+  }
 
-export async function getQdrantClient() {
-  console.log(`[Vector DB] Connecting to Qdrant at ${config.qdrantUrl}`);
-  return {
-    search: async (collectionName, params) => {
-      console.log(`[Qdrant Search] Collection: ${collectionName}, Vector size: ${params.vector?.length}`);
-      return [];
-    },
-  };
+  async upsert(points) {
+    this.collection.push(...points);
+    return { status: "completed" };
+  }
+
+  async search(vector, topK = 5) {
+    // Simple similarity match based on vector dot product
+    const scored = this.collection.map((pt) => {
+      let sim = 0;
+      if (pt.vector && vector && pt.vector.length === vector.length) {
+        sim = pt.vector.reduce((sum, v, i) => sum + v * vector[i], 0);
+      }
+      return { ...pt, score: sim };
+    });
+
+    scored.sort((a, b) => b.score - a.score);
+    return scored.slice(0, topK);
+  }
 }
+
+export const qdrantClient = new QdrantConnector();
 ```
 
 ### 3. Redis Cache & Queue Driver (`src/infrastructure/redis.js`)
@@ -147,17 +195,37 @@ export async function getQdrantClient() {
 Provides Redis client abstraction for caching and non-blocking event queue operations:
 
 ```javascript
-import { config } from '../config.js';
+/**
+ * Infrastructure Connector: Redis In-Memory Key-Value Store
+ * Used for session cache and queue buffer simulation.
+ */
+export class RedisConnector {
+  constructor() {
+    this.store = new Map();
+  }
 
-export async function getRedisClient() {
-  console.log(`[Cache/Queue] Connecting to Redis at ${config.redisUrl}`);
-  return {
-    get: async (key) => null,
-    set: async (key, val, mode, ttl) => 'OK',
-    lpush: async (key, val) => 1,
-    rpop: async (key) => null,
-  };
+  async get(key) {
+    return this.store.get(key) || null;
+  }
+
+  async set(key, value) {
+    this.store.set(key, value);
+    return "OK";
+  }
+
+  async lpush(queueName, payload) {
+    if (!this.store.has(queueName)) this.store.set(queueName, []);
+    this.store.get(queueName).unshift(payload);
+  }
+
+  async rpop(queueName) {
+    if (!this.store.has(queueName)) return null;
+    const list = this.store.get(queueName);
+    return list.pop() || null;
+  }
 }
+
+export const redisCache = new RedisConnector();
 ```
 
 ---

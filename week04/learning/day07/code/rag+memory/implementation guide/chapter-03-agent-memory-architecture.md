@@ -36,31 +36,50 @@ rag+memory/src/memory/ShortTermMemory.js
 
 ### Code
 
-```typescript
+```javascript
+/**
+ * ShortTermMemory.js
+ * Sliding Window Short-Term Memory (STM) Store
+ * Persists recent N turns per session to maintain immediate conversation continuity.
+ */
 export class ShortTermMemory {
-  constructor(maxTurns = 5) {
-    this.sessions = new Map();
+  constructor(maxTurns = 6) {
     this.maxTurns = maxTurns;
+    this.sessions = new Map(); // sessionId -> Array of { role, content, timestamp }
   }
 
+  /**
+   * Append a message turn to short-term memory
+   */
   async addMessage(sessionId, role, content) {
     if (!this.sessions.has(sessionId)) {
       this.sessions.set(sessionId, []);
     }
     const history = this.sessions.get(sessionId);
-    history.push({ role, content, timestamp: Date.now() });
+    history.push({
+      role,
+      content,
+      timestamp: new Date().toISOString(),
+    });
 
-    // Maintain sliding window buffer
-    if (history.length > this.maxTurns * 2) {
-      this.sessions.set(sessionId, history.slice(-this.maxTurns * 2));
+    // Enforce sliding window size limit
+    if (history.length > this.maxTurns) {
+      this.sessions.set(sessionId, history.slice(-this.maxTurns));
     }
   }
 
-  async getRecentWindow(sessionId, turnLimit = 5) {
+  /**
+   * Fetch recent sliding window messages
+   */
+  async getRecentWindow(sessionId, limit = null) {
+    const fetchLimit = limit || this.maxTurns;
     const history = this.sessions.get(sessionId) || [];
-    return history.slice(-turnLimit * 2);
+    return history.slice(-fetchLimit);
   }
 
+  /**
+   * Clear session history
+   */
   async clearSession(sessionId) {
     this.sessions.delete(sessionId);
   }
@@ -81,59 +100,103 @@ rag+memory/src/memory/LongTermMemory.js
 
 ### Code
 
-```typescript
+```javascript
 import { getEmbedding, cosineSimilarity } from "../utils/embeddings.js";
 
+/**
+ * LongTermMemory.js
+ * Long-Term Memory (LTM) Store: Semantic Facts + Episodic Events
+ * Implements Vector RAG lookup and hit-score recency tracking.
+ */
 export class LongTermMemory {
   constructor() {
-    this.userMemories = new Map();
+    this.semanticMemory = []; // Array of { id, userId, fact, category, vector, createdAt, hitCount, lastAccessedAt }
+    this.episodicMemory = []; // Array of { id, userId, event, timestamp, vector }
   }
 
-  async storeFact(userId, fact, category = "fact") {
-    if (!this.userMemories.has(userId)) {
-      this.userMemories.set(userId, []);
+  /**
+   * Store a semantic fact in LTM
+   */
+  async addFact(userId, factText, category = "general") {
+    // Check if fact already exists to prevent duplication
+    const existing = this.semanticMemory.find(
+      (item) => item.userId === userId && item.fact.toLowerCase() === factText.toLowerCase()
+    );
+
+    if (existing) {
+      existing.hitCount += 1;
+      existing.lastAccessedAt = new Date().toISOString();
+      return existing;
     }
 
-    const embedding = await getEmbedding(fact);
-    const memoryRecord = {
-      id: `mem_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-      fact,
+    const vector = await getEmbedding(factText);
+    const newRecord = {
+      id: `fact_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      userId,
+      fact: factText,
       category,
-      embedding,
-      createdAt: Date.now(),
-      hitCount: 0,
-      lastAccessed: Date.now(),
+      vector,
+      createdAt: new Date().toISOString(),
+      hitCount: 1,
+      lastAccessedAt: new Date().toISOString(),
     };
 
-    const userFacts = this.userMemories.get(userId);
-    userFacts.push(memoryRecord);
-    return memoryRecord;
+    this.semanticMemory.push(newRecord);
+    return newRecord;
   }
 
-  async searchRelevantFacts(userId, queryText, topK = 3) {
-    const userFacts = this.userMemories.get(userId) || [];
+  /**
+   * Log an episodic interaction event
+   */
+  async addEpisodicEvent(userId, eventText) {
+    const vector = await getEmbedding(eventText);
+    const eventRecord = {
+      id: `ep_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      userId,
+      event: eventText,
+      timestamp: new Date().toISOString(),
+      vector,
+    };
+    this.episodicMemory.push(eventRecord);
+    return eventRecord;
+  }
+
+  /**
+   * Search query-relevant facts from Semantic LTM via Vector RAG
+   */
+  async searchRelevantFacts(userId, query, topK = 3) {
+    const queryVec = await getEmbedding(query);
+    const userFacts = this.semanticMemory.filter((f) => f.userId === userId);
+
     if (userFacts.length === 0) return [];
 
-    const queryVector = await getEmbedding(queryText);
-    const scored = userFacts.map((mem) => {
-      const sim = cosineSimilarity(queryVector, mem.embedding);
-      return { ...mem, score: sim };
+    const scored = userFacts.map((item) => {
+      const similarity = cosineSimilarity(queryVec, item.vector);
+      return { ...item, score: similarity };
     });
 
     scored.sort((a, b) => b.score - a.score);
-    const topFacts = scored.slice(0, topK);
+    const results = scored.slice(0, topK);
 
-    // Update hit count statistics
-    topFacts.forEach((f) => {
-      f.hitCount++;
-      f.lastAccessed = Date.now();
+    // Update hit score metrics for retrieved facts
+    results.forEach((res) => {
+      const original = this.semanticMemory.find((f) => f.id === res.id);
+      if (original) {
+        original.hitCount += 1;
+        original.lastAccessedAt = new Date().toISOString();
+      }
     });
 
-    return topFacts;
+    return results;
   }
 
-  async getAllUserFacts(userId) {
-    return this.userMemories.get(userId) || [];
+  /**
+   * Evict specific fact IDs
+   */
+  evictFacts(factIds) {
+    const initialCount = this.semanticMemory.length;
+    this.semanticMemory = this.semanticMemory.filter((f) => !factIds.includes(f.id));
+    return initialCount - this.semanticMemory.length;
   }
 }
 ```

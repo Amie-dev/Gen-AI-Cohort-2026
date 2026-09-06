@@ -13,9 +13,9 @@ A robust architecture requires:
 ```text
 src/
 ├── db/
-│   ├── qdrant.js        # Qdrant Client & ensureCollection()
+│   ├── qdrant.js        # Qdrant Client & collection initializers
 │   ├── postgres.js      # Relational DB query interface
-│   └── redis.js         # Redis IORedis connection client
+│   └── redis.js         # Redis connection parameters & client builder
 └── rag/
     └── llmClient.js     # Unified generateLLM() with mock fallbacks
 ```
@@ -34,30 +34,53 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const qdrantUrl = process.env.QDRANT_URL || 'http://127.0.0.1:6333';
-export const collectionName = process.env.QDRANT_COLLECTION || 'adv_rag_1_documents';
+const qdrantUrl = process.env.QDRANT_URL || 'http://localhost:6333';
+export const COLLECTION_NAME = process.env.QDRANT_COLLECTION || 'production_rag_docs';
 
-export const qdrant = new QdrantClient({ url: qdrantUrl });
+export const qdrantClient = new QdrantClient({ url: qdrantUrl });
 
 /**
- * Ensures that the required vector collection exists in Qdrant.
- * Creates it dynamically with Cosine similarity if not present.
+ * Initialize Qdrant collection if it does not already exist
  */
-export async function ensureCollection() {
+export async function initQdrantCollection(vectorSize = 1536) {
   try {
-    const exists = await qdrant.collectionExists(collectionName);
-    if (!exists.exists) {
-      console.log(`Creating Qdrant collection "${collectionName}"...`);
-      await qdrant.createCollection(collectionName, {
+    const result = await qdrantClient.getCollections();
+    const exists = result.collections.some(c => c.name === COLLECTION_NAME);
+
+    if (!exists) {
+      console.log(`[Qdrant DB] Creating collection "${COLLECTION_NAME}"...`);
+      await qdrantClient.createCollection(COLLECTION_NAME, {
         vectors: {
-          size: Number(process.env.EMBEDDING_DIMENSIONS) || 1536,
-          distance: 'Cosine',
-        },
+          size: vectorSize,
+          distance: 'Cosine'
+        }
       });
-      console.log(`✅ Collection "${collectionName}" successfully created.`);
+      console.log(`[Qdrant DB] Collection "${COLLECTION_NAME}" created successfully.`);
     }
   } catch (error) {
-    console.error('Error ensuring Qdrant collection:', error);
+    console.warn(`[Qdrant DB Warning] Could not connect to Qdrant at ${qdrantUrl}. Using fallback vector search mode. Error:`, error.message);
+  }
+}
+
+/**
+ * Search Qdrant vector database with vector array
+ */
+export async function searchQdrant(vector, limit = 5, filter = null) {
+  try {
+    const searchParams = {
+      vector,
+      limit,
+      with_payload: true
+    };
+
+    if (filter) {
+      searchParams.filter = filter;
+    }
+
+    return await qdrantClient.search(COLLECTION_NAME, searchParams);
+  } catch (error) {
+    console.warn(`[Qdrant DB] Qdrant search fallback: ${error.message}`);
+    return [];
   }
 }
 ```
@@ -69,25 +92,32 @@ export async function ensureCollection() {
 Create [`src/db/postgres.js`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/db/postgres.js):
 
 ```javascript
+import dotenv from 'dotenv';
+dotenv.config();
+
 /**
- * Relational DB Client (PostgreSQL Interface Mock)
- * Serves structured user account, billing status, and subscription data.
+ * PostgreSQL Data Access Client
+ * Handles relational queries for auth, account balances, and billing plans.
  */
-export async function queryPostgres(sqlQuery, params = []) {
-  console.log(`🛢️ [PostgreSQL] Query: "${sqlQuery}"`);
-  
-  // Return structured mock billing record for testing
-  return [
-    {
-      userId: 'usr_default',
-      accountName: 'Acme Corporation',
-      plan: 'Enterprise Tier',
-      billingStatus: 'Active',
-      monthlyFee: '$299.00',
-      lastBillingDate: '2026-08-01',
-      refundEligible: true,
-    }
-  ];
+export async function queryPostgres(sql, params = []) {
+  console.log(`[PostgreSQL DB] Executing query: ${sql}`, params);
+
+  // Return realistic mock data for account/billing queries
+  if (sql.toLowerCase().includes('account') || sql.toLowerCase().includes('plan')) {
+    return [
+      {
+        userId: 'usr_123',
+        userName: 'John Doe',
+        plan: 'Enterprise Pro',
+        billingStatus: 'Active',
+        accountBalance: '$250.00',
+        refundEligibility: 'Eligible within 30 days of renewal',
+        lastPaymentDate: '2026-08-01'
+      }
+    ];
+  }
+
+  return [];
 }
 ```
 
@@ -103,11 +133,18 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-export const redisConnection = new Redis({
-  host: process.env.REDIS_HOST || '127.0.0.1',
-  port: Number(process.env.REDIS_PORT) || 6379,
-  maxRetriesPerRequest: null,
-});
+const redisHost = process.env.REDIS_HOST || 'localhost';
+const redisPort = parseInt(process.env.REDIS_PORT || '6379', 10);
+
+export const redisConnection = {
+  host: redisHost,
+  port: redisPort,
+  maxRetriesPerRequest: null
+};
+
+export const createRedisClient = () => {
+  return new Redis(redisConnection);
+};
 ```
 
 ---
@@ -237,9 +274,9 @@ export async function generateLLM({ system, user }) {
 ## 4. Summary & Next Steps
 
 In this chapter, we implemented:
-- `src/db/qdrant.js`: Qdrant REST client and collection auto-creation.
+- `src/db/qdrant.js`: Qdrant REST client, collection auto-creation, and search functions.
 - `src/db/postgres.js`: PostgreSQL query interface mock.
-- `src/db/redis.js`: IORedis connection client configured for BullMQ queues.
+- `src/db/redis.js`: Redis connection parameters and client builder for BullMQ.
 - `src/rag/llmClient.js`: Shared `generateLLM()` helper providing automated fallback responses when no OpenAI API key is supplied.
 
 In [**Chapter 02 — Guardrails & Security Subsystem**](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/implementation%20guide/chapter-02-guardrails-security.md), we will build the input validation, prompt injection defense, Regex PII masking/unmasking, and output verification layer.

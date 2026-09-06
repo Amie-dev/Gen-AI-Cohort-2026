@@ -5,10 +5,10 @@
 The goal of this chapter is to build the query routing, vector search, and filtering layers in [`src/routing/`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag/src/routing/) and [`src/retrieval/`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag/src/retrieval/).
 
 In enterprise environments, executing every search against every database is wasteful and slow. The **Query Router** analyzes incoming queries to determine whether the request belongs to:
-- **`sql`**: Billing, invoices, refund eligibility, subscription plans.
-- **`mongo`**: User session logs, login history, preferences.
-- **`s3`**: Unstructured file bucket objects.
-- **`vector`**: Text chunk embeddings stored in Qdrant.
+- **`AUTH_DB`**: Billing, invoices, refund eligibility, subscription plans.
+- **`VECTOR_DB`**: Text chunk embeddings stored in Qdrant.
+- **`S3`**: Unstructured file bucket objects.
+- **`MULTI_STORE`**: Requests requiring user account data AND documentation/policy details.
 
 ```text
                                 Search Query
@@ -21,14 +21,14 @@ In enterprise environments, executing every search against every database is was
                                      │
         ┌──────────────────┬─────────┴────────┬──────────────────┐
         ▼                  ▼                  ▼                  ▼
-  [ SQL Router ]    [ Mongo Router ]    [ S3 Router ]    [ Vector Router ]
+   [ AUTH_DB ]       [ VECTOR_DB ]         [ S3 ]       [ MULTI_STORE ]
         │                  │                  │                  │
         ▼                  ▼                  ▼                  ▼
-  Relational DB        NoSQL DB           S3 Bucket       Qdrant Vector DB
-                                                                 │
-                                                                 ▼
-                                                        Metadata Permission Filter
-                                                         (tenantId / accessLevel)
+  Relational DB       Qdrant Vector DB    S3 Bucket       Multi Data Store
+                               │
+                               ▼
+                    Metadata Permission Filter
+                     (tenantId / accessLevel)
 ```
 
 ---
@@ -38,50 +38,62 @@ In enterprise environments, executing every search against every database is was
 Create [`src/routing/queryRouter.js`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag/src/routing/queryRouter.js):
 
 ```javascript
+import OpenAI from "openai";
+import { config } from "../config.js";
+
+const openai = new OpenAI({ apiKey: config.openai.apiKey });
+
 /**
- * Smart Multi-Source Query Router
- * Classifies query intent to select the optimal data adapter (vector, sql, mongo, s3).
+ * Step 6: Query Routing
+ * Routes a query to the appropriate data store (AUTH_DB, VECTOR_DB, S3, MULTI_STORE).
  */
 export async function routeQuery(query) {
-  const lower = query.toLowerCase();
+  try {
+    const completion = await openai.chat.completions.create({
+      model: config.openai.chatModel,
+      temperature: 0.0,
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "query_routing",
+          strict: true,
+          schema: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              targetStore: {
+                type: "string",
+                enum: ["AUTH_DB", "VECTOR_DB", "S3", "MULTI_STORE"],
+                description: "Selected data store route.",
+              },
+              reasoning: {
+                type: "string",
+                description: "Justification for route selection.",
+              },
+            },
+            required: ["targetStore", "reasoning"],
+          },
+        },
+      },
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are an enterprise query router.\n" +
+            "- AUTH_DB: User account, billing, current plan, status, payment.\n" +
+            "- VECTOR_DB: General documentation, conceptual questions, TDZ, code, policies.\n" +
+            "- S3: Invoice download, PDFs, asset files.\n" +
+            "- MULTI_STORE: Requests requiring user account data AND documentation/policy details.",
+        },
+        { role: "user", content: query },
+      ],
+    });
 
-  // 1. Relational SQL Billing / Subscription Intent Rules
-  if (
-    lower.includes("invoice") ||
-    lower.includes("billing") ||
-    lower.includes("subscription") ||
-    lower.includes("payment") ||
-    lower.includes("refund") ||
-    lower.includes("monthly fee")
-  ) {
-    console.log(`🔀 [Router] Classified query intent -> "sql" (Relational DB)`);
-    return "sql";
+    return JSON.parse(completion.choices[0]?.message?.content ?? '{"targetStore":"VECTOR_DB"}');
+  } catch (err) {
+    console.error("⚠️ Query Routing failed, default to VECTOR_DB:", err.message);
+    return { targetStore: "VECTOR_DB", reasoning: "Fallback default" };
   }
-
-  // 2. NoSQL User Sessions / Telemetry Intent Rules
-  if (
-    lower.includes("session") ||
-    lower.includes("last login") ||
-    lower.includes("telemetry") ||
-    lower.includes("preferences")
-  ) {
-    console.log(`🔀 [Router] Classified query intent -> "mongo" (NoSQL DB)`);
-    return "mongo";
-  }
-
-  // 3. S3 Bucket File Storage Intent Rules
-  if (
-    lower.includes("raw file") ||
-    lower.includes("s3 bucket") ||
-    lower.includes("attachment")
-  ) {
-    console.log(`🔀 [Router] Classified query intent -> "s3" (Object Storage)`);
-    return "s3";
-  }
-
-  // 4. Default -> Qdrant Vector Semantic Search
-  console.log(`🔀 [Router] Classified query intent -> "vector" (Qdrant Vector DB)`);
-  return "vector";
 }
 ```
 
@@ -94,41 +106,53 @@ Create [`src/retrieval/vectorSearch.js`](file:///home/aminul/development/gen-ai-
 ```javascript
 import OpenAI from "openai";
 import { config } from "../config.js";
-import { qdrant, ensureCollection } from "../db/qdrant.js";
+import { qdrant } from "../db/qdrant.js";
 
 const openai = new OpenAI({ apiKey: config.openai.apiKey });
 
-export async function vectorSearch(searchQuery) {
-  const collectionName = await ensureCollection();
+/**
+ * Embeds a text query and performs top-K cosine similarity search on Qdrant.
+ */
+export async function vectorSearch(queryText) {
+  try {
+    const res = await openai.embeddings.create({
+      model: config.openai.embeddingModel,
+      input: queryText,
+    });
+    const vector = res.data[0].embedding;
 
-  // 1. Embed query vector via OpenAI text-embedding-3-small
-  const embeddingRes = await openai.embeddings.create({
-    model: config.openai.embeddingModel,
-    input: searchQuery,
-  });
+    const hits = await qdrant.search(config.qdrant.collection, {
+      vector,
+      limit: config.retrieval.topK,
+      with_payload: true,
+    });
 
-  const queryVector = embeddingRes.data[0].embedding;
-
-  // 2. Execute Cosine similarity search in Qdrant
-  const searchResults = await qdrant.search(collectionName, {
-    vector: queryVector,
-    limit: config.retrieval.topK,
-    with_payload: true,
-  });
-
-  // 3. Transform Qdrant points into standardized candidate format
-  return searchResults.map((hit) => ({
-    id: hit.id,
-    title: hit.payload?.source || "Vector Chunk",
-    text: hit.payload?.text || "",
-    source: hit.payload?.source || "Qdrant",
-    score: hit.score,
-    metadata: {
-      chunkIndex: hit.payload?.chunkIndex,
-      tenantId: hit.payload?.tenantId || "default",
-      accessLevel: hit.payload?.accessLevel || 1,
-    },
-  }));
+    return hits.map((h) => ({
+      id: h.id,
+      title: h.payload?.source || "Indexed Chunk",
+      text: h.payload?.text || "",
+      source: h.payload?.source || "Qdrant Vector DB",
+      score: h.score,
+      metadata: {
+        tenantId: h.payload?.tenantId || "default",
+        accessLevel: h.payload?.accessLevel || 1,
+      },
+    }));
+  } catch (err) {
+    console.error(`⚠️ Vector search failed for query "${queryText}":`, err.message);
+    
+    // Fallback static knowledge chunk if Qdrant isn't populated yet
+    return [
+      {
+        id: "fallback_chunk_1",
+        title: "Standard Knowledge Base",
+        text: `Document Content answering: ${queryText}. Subscriptions can be refunded within 14 days of purchase under company policy.`,
+        source: "Static Knowledge Fallback",
+        score: 0.85,
+        metadata: { tenantId: "default", accessLevel: 1 },
+      },
+    ];
+  }
 }
 ```
 
@@ -141,25 +165,22 @@ In multi-tenant SaaS applications, vector search results must be filtered to pre
 Create [`src/retrieval/filtering.js`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag/src/retrieval/filtering.js):
 
 ```javascript
-export function filterResults(retrievalResultsLists, user) {
-  const userTenant = user?.tenantId || "default";
-  const userAccessLevel = user?.accessLevel || 1;
+/**
+ * Step 9: Filtering
+ * Removes candidate documents failing tenant permissions, metadata criteria, or security ACL.
+ */
+export function filterResults(retrievalLists, user = {}) {
+  const userTenant = user.tenantId || "default";
+  const userAccess = user.accessLevel || 1;
 
-  // Flatten multi-query search result arrays
-  const allDocs = retrievalResultsLists.flat();
-
-  // Apply tenant and security access-level filters
-  const filtered = allDocs.filter((doc) => {
-    const docTenant = doc.metadata?.tenantId || "default";
-    const docAccess = doc.metadata?.accessLevel || 1;
-
-    const tenantMatch = docTenant === userTenant || docTenant === "default";
-    const accessMatch = userAccessLevel >= docAccess;
-
-    return tenantMatch && accessMatch;
+  return retrievalLists.map((list) => {
+    if (!Array.isArray(list)) return [];
+    return list.filter((doc) => {
+      const docTenant = doc.metadata?.tenantId || "default";
+      const docAccess = doc.metadata?.accessLevel || 1;
+      return docTenant === userTenant && docAccess <= userAccess;
+    });
   });
-
-  return filtered;
 }
 ```
 
@@ -168,8 +189,8 @@ export function filterResults(retrievalResultsLists, user) {
 ## 5. Summary & Next Steps
 
 In this chapter, we implemented:
-- `routeQuery()`: Intelligent intent router selecting between SQL, NoSQL, S3, and Vector adapters.
-- `vectorSearch()`: Converts queries to 1536-dimensional vectors and retrieves candidate chunks from Qdrant.
+- `routeQuery()`: Intelligent intent router selecting between AUTH_DB, VECTOR_DB, S3, and MULTI_STORE routes.
+- `vectorSearch()`: Converts queries to embeddings and retrieves candidate chunks from Qdrant with static fallback.
 - `filterResults()`: Security filter enforcing tenant isolation and access control levels.
 
 In [**Chapter 05 — Rank Fusion, Reranking & CRAG**](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag/implementation%20guide/chapter-05-fusion-reranking-crag.md), we will build Reciprocal Rank Fusion (RRF), the cross-encoder LLM reranker, and Corrective RAG (CRAG) evaluation loops.

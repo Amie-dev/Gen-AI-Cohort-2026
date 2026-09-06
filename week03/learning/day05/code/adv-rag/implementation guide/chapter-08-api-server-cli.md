@@ -5,8 +5,8 @@
 The goal of this final chapter is to build the application client interfaces in [`src/index.js`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag/src/index.js) and [`src/cli.js`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag/src/cli.js).
 
 Users and client services interact with the RAG pipeline via two access modes:
-1. **Express REST API Server (`src/index.js`)**: Serves HTTP endpoints for document uploading and RAG chat.
-2. **Interactive CLI Shell (`src/cli.js`)**: Terminal Readline environment for debugging RAG query pipeline execution directly in the console.
+1. **Express REST API Server (`src/index.js`)**: Serves HTTP endpoints for document uploading, asynchronous queueing, polling, and synchronous RAG queries.
+2. **Terminal CLI Shell (`src/cli.js`)**: Command-line execution tool for running RAG queries directly.
 
 ---
 
@@ -23,132 +23,152 @@ import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { config } from "./config.js";
 import { productionRAG } from "./rag/ragPipeline.js";
-import { enqueueIndexingJob } from "./queues/indexingQueue.js";
+import { enqueueIndexingJob, enqueueQueryJob, queryQueue } from "./queues/indexingQueue.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const uploadDir = path.join(__dirname, "..", "uploads");
 
+// Ensure upload directory exists
 fs.mkdirSync(uploadDir, { recursive: true });
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, uploadDir),
   filename: (_req, file, cb) => {
-    const unique = `${Date.now()}-${crypto.randomUUID()}`;
+    const unique = `${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
     cb(null, `${unique}${path.extname(file.originalname)}`);
   },
 });
 
 const upload = multer({
   storage,
-  limits: { fileSize: 25 * 1024 * 1024 },
+  limits: { fileSize: 25 * 1024 * 1024 }, // 25 MB max
   fileFilter: (_req, file, cb) => {
     if (file.mimetype === "application/pdf") return cb(null, true);
-    cb(new Error("Only PDF files are allowed"));
+    cb(new Error("Only PDF files are supported"));
   },
 });
 
 const app = express();
 app.use(express.json());
 
-app.get("/health", (_req, res) => res.json({ status: "ok" }));
+// Health Check
+app.get("/health", (_req, res) => {
+  res.json({ status: "ok", service: "Production Advanced RAG System" });
+});
 
-// --- POST /api/rag/chat : Execute Master 13-Step Production RAG Pipeline ---
-app.post("/api/rag/chat", async (req, res) => {
-  const { query, user } = req.body || {};
-
-  if (!query || typeof query !== "string" || query.trim().length === 0) {
-    return res.status(400).json({ error: "Body must include a non-empty 'query' string." });
+// Synchronous Direct RAG Query Endpoint
+app.post("/api/rag", async (req, res) => {
+  const userQuery = req.body?.query;
+  if (!userQuery || typeof userQuery !== "string") {
+    return res.status(400).json({ error: "Body must include a non-empty 'query' string" });
   }
 
   try {
-    const result = await productionRAG(query.trim(), user);
+    const user = req.body?.user || { id: "USER_123", tenantId: "default", accessLevel: 1 };
+    const result = await productionRAG(userQuery, user);
     return res.json(result);
   } catch (err) {
-    console.error("Failed to process RAG request:", err);
-    return res.status(500).json({ error: "Internal RAG processing error." });
+    console.error("API RAG Error:", err);
+    return res.status(500).json({ error: err.message });
   }
 });
 
-// --- POST /api/rag/index : Upload PDF & Enqueue Async Indexing Job ---
-app.post("/api/rag/index", upload.single("file"), async (req, res) => {
+// Asynchronous Document Upload & Indexing Endpoint
+app.post("/index", upload.single("file"), async (req, res) => {
   if (!req.file) {
-    return res.status(400).json({ error: "No PDF file uploaded (field name: 'file')." });
+    return res.status(400).json({ error: "No PDF file uploaded (multipart field: 'file')" });
   }
 
   try {
-    const job = await enqueueIndexingJob({
-      filePath: req.file.path,
-      originalName: req.file.originalname,
-      mimeType: req.file.mimetype,
-      size: req.file.size,
-    });
-
+    const job = await enqueueIndexingJob(req.file.path, req.file.originalname);
     return res.status(202).json({
-      message: "PDF uploaded and queued for background indexing.",
+      message: "File uploaded and enqueued for asynchronous indexing",
       jobId: job.id,
       file: { originalName: req.file.originalname, size: req.file.size },
     });
   } catch (err) {
-    console.error("Failed to queue indexing job:", err);
-    return res.status(500).json({ error: "Failed to queue file for indexing." });
+    console.error("Failed to enqueue indexing job:", err);
+    return res.status(500).json({ error: "Failed to queue indexing job" });
   }
 });
 
-app.use((err, _req, res, _next) => {
-  console.error(err);
-  return res.status(400).json({ error: err.message });
+// Asynchronous RAG Query Queueing Endpoint
+app.post("/query", async (req, res) => {
+  const userQuery = req.body?.query;
+  if (!userQuery || typeof userQuery !== "string") {
+    return res.status(400).json({ error: "Body must include a non-empty 'query' string" });
+  }
+
+  try {
+    const user = req.body?.user || { id: "USER_123", tenantId: "default", accessLevel: 1 };
+    const job = await enqueueQueryJob(userQuery, user);
+    return res.status(202).json({
+      message: "RAG Query queued for background execution",
+      jobId: job.id,
+      poll: `/query/${job.id}`,
+    });
+  } catch (err) {
+    console.error("Failed to enqueue query job:", err);
+    return res.status(500).json({ error: "Failed to queue query job" });
+  }
+});
+
+// Polling Endpoint for Async Query Result
+app.get("/query/:id", async (req, res) => {
+  try {
+    const job = await queryQueue.getJob(req.params.id);
+    if (!job) return res.status(404).json({ error: "Job not found" });
+
+    const state = await job.getState();
+    if (state === "completed") {
+      return res.json({ jobId: job.id, status: state, result: job.returnvalue });
+    }
+    if (state === "failed") {
+      return res.status(200).json({ jobId: job.id, status: state, error: job.failedReason });
+    }
+
+    return res.json({ jobId: job.id, status: state });
+  } catch (err) {
+    console.error("Failed to fetch query job:", err);
+    return res.status(500).json({ error: "Failed to fetch query status" });
+  }
 });
 
 app.listen(config.port, () => {
-  console.log(`🚀 Advanced RAG REST API server running on http://localhost:${config.port}`);
+  console.log(`\n🚀 Advanced RAG HTTP API Server running on http://localhost:${config.port}`);
 });
 ```
 
 ---
 
-## 3. Interactive Terminal CLI Shell (`src/cli.js`)
+## 3. Terminal CLI Tool (`src/cli.js`)
 
 Create [`src/cli.js`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag/src/cli.js):
 
 ```javascript
-import readline from "node:readline";
 import { productionRAG } from "./rag/ragPipeline.js";
 
-const rl = readline.createInterface({
-  input: process.stdin,
-  output: process.stdout,
-});
+async function main() {
+  const args = process.argv.slice(2);
+  const query = args[0] || "What is my current account balance and refund policy?";
 
-console.log("==================================================");
-console.log("🤖 Enterprise Advanced RAG Interactive CLI Shell");
-console.log("Type your question below (or type 'exit' to quit):");
-console.log("==================================================\n");
+  console.log(`⚡ Production Advanced RAG Console CLI ⚡\n`);
+  console.log(`User Query: "${query}"\n`);
 
-function promptUser() {
-  rl.question("❓ Question: ", async (input) => {
-    const query = input.trim();
-    if (query.toLowerCase() === "exit" || query.toLowerCase() === "quit") {
-      console.log("👋 Exiting CLI. Goodbye!");
-      rl.close();
-      process.exit(0);
-    }
+  const user = { id: "USER_123", tenantId: "default", accessLevel: 1 };
+  const result = await productionRAG(query, user);
 
-    if (query.length > 0) {
-      const result = await productionRAG(query);
-      console.log("\n==================================================");
-      console.log(`💬 Answer: ${result.answer}`);
-      console.log(`📊 CRAG Score: ${result.score}/10 | Attempts: ${result.attempts}`);
-      if (result.sources && result.sources.length > 0) {
-        console.log(`📚 Sources: ${result.sources.map((s) => s.title).join(", ")}`);
-      }
-      console.log("==================================================\n");
-    }
-
-    promptUser();
-  });
+  console.log(`\n==================================================`);
+  console.log(`🎯 FINAL ANSWER RESULT:`);
+  console.log(`==================================================\n`);
+  console.log(result.answer);
+  console.log(`\n--------------------------------------------------`);
+  console.log(`Quality Score: ${result.score}/10 | Success: ${result.success}`);
+  console.log(`Sources Used:`, result.sources);
+  console.log(`--------------------------------------------------\n`);
 }
 
-promptUser();
+main();
 ```
 
 ---
@@ -158,28 +178,7 @@ promptUser();
 ### 1. Test Terminal CLI Interface
 
 ```bash
-npm run cli
-```
-
-**Console Session**:
-```text
-🤖 Enterprise Advanced RAG Interactive CLI Shell
-Type your question below (or type 'exit' to quit):
-
-❓ Question: What is my billing status and subscription plan?
-
-🚀 Starting Production RAG Pipeline for query: "What is my billing status and subscription plan?"
-🛡️ [Input Guardrails] Validating input query...
-🧩 [Step 2] Translating query into multiple representations...
-🔀 [Step 3 & 4] Routing queries & executing multi-source retrieval...
-🛢️ [Router] Classified query intent -> "sql" (Relational DB)
-📊 [Step 6] Merging ranked lists using Reciprocal Rank Fusion (RRF)...
-⭐ [Step 7] Re-ranking candidates...
-🤖 [Step 10] Generating grounded answer...
-📋 [Step 11] Running CRAG evaluation... (Score 9/10)
-
-💬 Answer: User John Doe is on the Pro Tier subscription. Your account status is Active with a monthly fee of $29.99.
-📊 CRAG Score: 9/10 | Attempts: 1
+node src/cli.js "What is my subscription plan?"
 ```
 
 ---
@@ -187,7 +186,7 @@ Type your question below (or type 'exit' to quit):
 ### 2. Test REST API Chat Endpoint
 
 ```bash
-curl -X POST http://localhost:8000/api/rag/chat \
+curl -X POST http://localhost:8000/api/rag \
   -H "Content-Type: application/json" \
   -d '{"query": "What is the status of my subscription?"}'
 ```

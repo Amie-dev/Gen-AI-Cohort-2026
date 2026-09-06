@@ -32,14 +32,21 @@ User Query: "What is PostgreSQL vector index?"
 
 ## 2. Implementing Query Transformations (`src/rag/query/`)
 
+## 2. Implementing Query Transformations (`src/rag/query/`)
+
 ### 1. Hypothetical Document Embeddings (`src/rag/query/hyde.js`)
 
 Generates a hypothetical ideal response document before vector embedding lookup:
 
 ```javascript
-export async function generateHydeDocument(query) {
-  console.log(`[HyDE] Generating hypothetical document for: "${query}"`);
-  return `Hypothetical document containing technical specifications regarding: ${query}`;
+/**
+ * HyDE (Hypothetical Document Embeddings) Generator
+ * Generates synthetic hypothetical passage to improve dense vector retrieval matching.
+ */
+export class HyDEGenerator {
+  static generatePassage(query) {
+    return `Technical Documentation passage addressing "${query}": Key details include system design, database indexing, vector similarity, and production optimization patterns.`;
+  }
 }
 ```
 
@@ -48,9 +55,17 @@ export async function generateHydeDocument(query) {
 Removes conversational fluff and optimizes search keywords:
 
 ```javascript
-export async function rewriteQuery(query) {
-  console.log(`[QueryRewrite] Rewriting query: "${query}"`);
-  return `${query} technical overview specifications documentation`;
+/**
+ * Query Rewriter
+ * Normalizes user queries into clean, keyword-dense search strings.
+ */
+export class QueryRewriter {
+  static rewrite(query) {
+    const cleaned = query
+      .replace(/(please|can you|tell me|i want to know|what is|how to)/gi, "")
+      .trim();
+    return cleaned.length > 0 ? `${cleaned} technical specification` : query;
+  }
 }
 ```
 
@@ -59,9 +74,14 @@ export async function rewriteQuery(query) {
 Generates a broader, higher-level abstract query to retrieve background context:
 
 ```javascript
-export async function generateStepBackQuery(query) {
-  console.log(`[StepBack] Generating step-back query for: "${query}"`);
-  return `High-level concepts behind ${query}`;
+/**
+ * Step-Back Prompting Generator
+ * Abstracts specific query into high-level conceptual background question.
+ */
+export class StepBackGenerator {
+  static generateStepBack(query) {
+    return `What are the core architectural concepts, design patterns, and principles behind ${query}?`;
+  }
 }
 ```
 
@@ -70,12 +90,17 @@ export async function generateStepBackQuery(query) {
 Splits complex multi-part questions into individual search queries:
 
 ```javascript
-export async function decomposeSubQueries(query) {
-  console.log(`[SubQueries] Decomposing sub-queries for: "${query}"`);
-  return [
-    `${query} definition`,
-    `${query} architecture implementation`,
-  ];
+/**
+ * Sub-Query Decomposition Module
+ * Decomposes complex user queries into distinct sub-questions targeting specific domains.
+ */
+export class SubQueryDecomposer {
+  static decompose(query) {
+    return [
+      `What is the primary definition and technical features of ${query.slice(0, 30)}?`,
+      `What are the best practices, scalability aspects, and implementation guidelines for ${query.slice(0, 30)}?`
+    ];
+  }
 }
 ```
 
@@ -86,18 +111,27 @@ export async function decomposeSubQueries(query) {
 Determines which underlying database store (Vector DB, PostgreSQL, MongoDB, or Hybrid) should execute the query:
 
 ```javascript
-export async function routeQuery(query) {
-  const lower = query.toLowerCase();
+/**
+ * Query Router
+ * Directs search queries to appropriate backend adapters (PostgreSQL, Qdrant Vector DB, MongoDB, S3 Object Store).
+ */
+export class QueryRouter {
+  static routeQuery(query) {
+    const qLower = query.toLowerCase();
+    const targets = ["vector_db"]; // Qdrant vector db is default
 
-  if (lower.includes('user') || lower.includes('account') || lower.includes('profile')) {
-    return { targetStore: 'postgres', strategy: 'relational_sql' };
+    if (qLower.includes("user") || qLower.includes("account") || qLower.includes("project")) {
+      targets.push("postgres");
+    }
+    if (qLower.includes("log") || qLower.includes("telemetry") || qLower.includes("event")) {
+      targets.push("mongodb");
+    }
+    if (qLower.includes("pdf") || qLower.includes("document") || qLower.includes("s3")) {
+      targets.push("s3_storage");
+    }
+
+    return targets;
   }
-
-  if (lower.includes('log') || lower.includes('event')) {
-    return { targetStore: 'mongodb', strategy: 'document_json' };
-  }
-
-  return { targetStore: 'qdrant', strategy: 'hybrid_vector_semantic' };
 }
 ```
 

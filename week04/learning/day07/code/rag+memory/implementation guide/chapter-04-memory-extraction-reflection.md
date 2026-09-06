@@ -37,34 +37,52 @@ rag+memory/src/memory/MemoryExtractor.js
 ### Code
 
 ```javascript
-import { callLLM } from "../utils/llm.js";
+import { generateJSON } from "../utils/llm.js";
 
+/**
+ * MemoryExtractor.js
+ * Fact Extraction Engine analyzing user turns to extract persistent facts and preferences.
+ */
 export class MemoryExtractor {
-  constructor(longTermMemory) {
-    this.ltm = longTermMemory;
+  constructor(ltmStore) {
+    this.ltmStore = ltmStore;
   }
 
-  async extractAndStore(userId, userMessage) {
-    const systemPrompt = `You are a Memory Extraction Subsystem.
-Analyze the user message and extract new personal facts, preferences, role definitions, or technical choices about the user.
-Output JSON format: { "facts": [ { "fact": string, "category": "preference" | "fact" | "personal" | "technical" } ] }
-If no new facts are present, output { "facts": [] }.`;
+  /**
+   * Extract facts from user query and save them into LTM
+   */
+  async extractAndStore(userId, userQuery) {
+    const systemPrompt = `You are an AI Memory Extraction Engine.
+Analyze the user message and extract new personal facts, preferences, or domain attributes.
+Return JSON:
+{
+  "extractedFacts": [
+    { "fact": "User is learning GenAI development", "category": "professional" },
+    { "fact": "User prefers vegetarian food", "category": "preference" }
+  ]
+}
+If no relevant persistent facts are found, return {"extractedFacts": []}.`;
+
+    const userPrompt = `User Message: "${userQuery}"`;
 
     try {
-      const responseText = await callLLM(systemPrompt, userMessage, 0.1);
-      const parsed = JSON.parse(responseText);
+      const result = await generateJSON(systemPrompt, userPrompt);
+      const facts = result.extractedFacts || [];
 
-      const storedRecords = [];
-      if (parsed.facts && Array.isArray(parsed.facts)) {
-        for (const item of parsed.facts) {
-          if (item.fact) {
-            const record = await this.ltm.storeFact(userId, item.fact, item.category || "fact");
-            storedRecords.push(record);
-          }
+      const savedRecords = [];
+      for (const item of facts) {
+        if (item.fact && typeof item.fact === "string") {
+          const rec = await this.ltmStore.addFact(userId, item.fact, item.category || "general");
+          savedRecords.push(rec);
         }
       }
-      return storedRecords;
-    } catch {
+
+      // Also log raw message as episodic event
+      await this.ltmStore.addEpisodicEvent(userId, userQuery);
+
+      return savedRecords;
+    } catch (err) {
+      console.warn(`[MemoryExtractor Warning] Extraction failed: ${err.message}`);
       return [];
     }
   }
@@ -86,55 +104,67 @@ rag+memory/src/memory/MemoryReflection.js
 ### Code
 
 ```javascript
-import { cosineSimilarity } from "../utils/embeddings.js";
+import { generateJSON } from "../utils/llm.js";
 
+/**
+ * MemoryReflection.js
+ * Memory "Dreaming" & Reflection Engine
+ * Background process for memory consolidation, deduplication, contradiction resolution, and eviction.
+ */
 export class MemoryReflection {
-  constructor(longTermMemory) {
-    this.ltm = longTermMemory;
+  constructor(ltmStore) {
+    this.ltmStore = ltmStore;
   }
 
-  async runDreamingPass(userId, similarityThreshold = 0.90) {
-    console.log(`[MemoryReflection] Starting background dreaming pass for user: ${userId}`);
-    const userFacts = await this.ltm.getAllUserFacts(userId);
-    if (userFacts.length <= 1) return { consolidated: 0, evicted: 0 };
+  /**
+   * Run Memory Dreaming consolidation pass for a user
+   */
+  async runReflectionPass(userId) {
+    const userFacts = this.ltmStore.semanticMemory.filter((f) => f.userId === userId);
 
-    let consolidatedCount = 0;
-    let evictedCount = 0;
-    const uniqueFacts = [];
-
-    // Deduplication pass based on semantic vector similarity
-    for (const factRecord of userFacts) {
-      let isDuplicate = false;
-      for (const existing of uniqueFacts) {
-        const sim = cosineSimilarity(factRecord.embedding, existing.embedding);
-        if (sim >= similarityThreshold) {
-          existing.hitCount += factRecord.hitCount + 1;
-          consolidatedCount++;
-          isDuplicate = true;
-          break;
-        }
-      }
-
-      if (!isDuplicate) {
-        uniqueFacts.push(factRecord);
-      }
+    if (userFacts.length < 2) {
+      return {
+        mergedCount: 0,
+        evictedCount: 0,
+        status: "Skipped - insufficient facts for reflection",
+      };
     }
 
-    // Eviction pass for stale entries (low hit count & old creation date)
-    const thirtyDays = 30 * 24 * 60 * 60 * 1000;
-    const now = Date.now();
-    const finalFacts = uniqueFacts.filter((fact) => {
-      const isOld = now - fact.createdAt > thirtyDays;
-      if (isOld && fact.hitCount === 0) {
-        evictedCount++;
-        return false;
-      }
-      return true;
-    });
+    const factsFormatted = userFacts.map((f) => `ID: ${f.id} | Fact: "${f.fact}" | Created: ${f.createdAt} | Hits: ${f.hitCount}`).join("\n");
 
-    this.ltm.userMemories.set(userId, finalFacts);
-    console.log(`[MemoryReflection] Pass Complete: ${consolidatedCount} consolidated, ${evictedCount} evicted.`);
-    return { consolidated: consolidatedCount, evicted: evictedCount };
+    const systemPrompt = `You are a Claude-style Memory Dreaming & Reflection Engine.
+Inspect the user's semantic memory list for duplicates, contradictions, or outdated facts.
+Return JSON:
+{
+  "contradictionsResolved": [
+    { "keepId": "fact_1", "removeId": "fact_2", "reason": "User updated location from Tokyo to London" }
+  ],
+  "evictIds": ["fact_3"]
+}`;
+
+    const userPrompt = `Semantic Facts List:\n${factsFormatted}`;
+
+    try {
+      const plan = await generateJSON(systemPrompt, userPrompt);
+      const evictSet = new Set(plan.evictIds || []);
+
+      if (Array.isArray(plan.contradictionsResolved)) {
+        plan.contradictionsResolved.forEach((c) => {
+          if (c.removeId) evictSet.add(c.removeId);
+        });
+      }
+
+      const evictedCount = this.ltmStore.evictFacts(Array.from(evictSet));
+
+      return {
+        mergedCount: (plan.contradictionsResolved || []).length,
+        evictedCount,
+        status: "Completed successfully",
+      };
+    } catch (err) {
+      console.warn(`[MemoryReflection Warning] Reflection pass failed: ${err.message}`);
+      return { mergedCount: 0, evictedCount: 0, status: `Failed: ${err.message}` };
+    }
   }
 }
 ```

@@ -48,32 +48,42 @@ We build a 4-part security subsystem:
 Create [`src/rag/guardrails/input.js`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/rag/guardrails/input.js):
 
 ```javascript
-import { checkJailbreak } from './jailbreak.js';
 import { maskPII } from './pii.js';
+import { detectJailbreak } from './jailbreak.js';
 
-export async function inputGuardrails(query, user) {
-  if (!query || typeof query !== 'string' || query.trim().length === 0) {
+/**
+ * Step 1 — Input Guardrails Coordinator
+ * Section 04: Evaluates input query for PII, prompt injection, and policy compliance.
+ */
+export async function inputGuardrails(userQuery, user) {
+  // 1. Jailbreak & Prompt Injection Check
+  const jailbreakCheck = detectJailbreak(userQuery);
+  if (jailbreakCheck.detected) {
     return {
       allowed: false,
-      message: 'Query string cannot be empty.'
+      message: `Security violation: ${jailbreakCheck.reason}`,
+      sanitizedQuery: null,
+      piiMap: {}
     };
   }
 
-  // 1. Jailbreak and Prompt Injection Verification
-  const jailbreakResult = checkJailbreak(query);
-  if (jailbreakResult.detected) {
+  // 2. PII Masking
+  const { sanitizedText, piiMap } = maskPII(userQuery);
+
+  // 3. User Authorization & Policy Check
+  if (user && user.blocked) {
     return {
       allowed: false,
-      message: `Security Policy Block: ${jailbreakResult.reason}`
+      message: 'Access denied: User account is restricted.',
+      sanitizedQuery: null,
+      piiMap: {}
     };
   }
-
-  // 2. Sensitive PII Detection & Token Masking
-  const { maskedText, piiMap } = maskPII(query);
 
   return {
     allowed: true,
-    sanitizedQuery: maskedText,
+    message: 'Allowed',
+    sanitizedQuery: sanitizedText,
     piiMap
   };
 }
@@ -86,27 +96,35 @@ export async function inputGuardrails(query, user) {
 Create [`src/rag/guardrails/jailbreak.js`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/rag/guardrails/jailbreak.js):
 
 ```javascript
-const MALICIOUS_PATTERNS = [
+/**
+ * Prompt Injection and Jailbreak Detector
+ * Section 04: Protects system prompts against override attempts and malicious inputs.
+ */
+
+const SUSPICIOUS_PATTERNS = [
   /ignore previous instructions/i,
-  /system prompt/i,
+  /ignore all prior instructions/i,
   /you are now DAN/i,
-  /override security controls/i,
-  /reveal secret keys/i,
-  /do anything now/i,
-  /dump environment/i
+  /reveal system prompt/i,
+  /bypass guardrails/i,
+  /drop database/i,
+  /system: override/i
 ];
 
-export function checkJailbreak(text) {
-  for (const pattern of MALICIOUS_PATTERNS) {
-    if (pattern.test(text)) {
+export function detectJailbreak(query) {
+  for (const pattern of SUSPICIOUS_PATTERNS) {
+    if (pattern.test(query)) {
       return {
         detected: true,
-        reason: 'Prompt injection or jailbreak pattern detected.'
+        reason: `Potential prompt injection detected: matching pattern "${pattern}"`
       };
     }
   }
 
-  return { detected: false };
+  return {
+    detected: false,
+    reason: null
+  };
 }
 ```
 
@@ -117,34 +135,43 @@ export function checkJailbreak(text) {
 Create [`src/rag/guardrails/pii.js`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/rag/guardrails/pii.js):
 
 ```javascript
-const PII_PATTERNS = {
-  EMAIL: /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,
-  PHONE: /\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/g,
-  SSN: /\b\d{3}-\d{2}-\d{4}\b/g
-};
+/**
+ * PII Masking and De-masking Module
+ * Section 05: Detects sensitive personal data, replaces with placeholders, and restores post-generation.
+ */
 
 export function maskPII(text) {
-  let maskedText = text;
   const piiMap = {};
-  let counter = 1;
+  let sanitizedText = text;
 
-  for (const [type, pattern] of Object.entries(PII_PATTERNS)) {
-    maskedText = maskedText.replace(pattern, (match) => {
-      const token = `[${type}_${counter++}]`;
-      piiMap[token] = match;
-      return token;
-    });
-  }
+  // Mask Name patterns (e.g. John Doe)
+  const nameRegex = /\b(John Doe|Jane Smith|Alice Johnson|Bob Brown)\b/gi;
+  sanitizedText = sanitizedText.replace(nameRegex, (match) => {
+    const placeholder = `USER_123`;
+    piiMap[placeholder] = match;
+    return placeholder;
+  });
 
-  return { maskedText, piiMap };
+  // Mask Email patterns
+  const emailRegex = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g;
+  sanitizedText = sanitizedText.replace(emailRegex, (match) => {
+    const placeholder = `EMAIL_PLACEHOLDER`;
+    piiMap[placeholder] = match;
+    return placeholder;
+  });
+
+  return {
+    sanitizedText,
+    piiMap
+  };
 }
 
 export function unmaskPII(text, piiMap = {}) {
-  let result = text;
-  for (const [token, original] of Object.entries(piiMap)) {
-    result = result.replaceAll(token, original);
+  let unmaskedText = text;
+  for (const [placeholder, originalValue] of Object.entries(piiMap)) {
+    unmaskedText = unmaskedText.replaceAll(placeholder, originalValue);
   }
-  return result;
+  return unmaskedText;
 }
 ```
 
@@ -157,16 +184,29 @@ Create [`src/rag/guardrails/output.js`](file:///home/aminul/development/gen-ai-c
 ```javascript
 import { unmaskPII } from './pii.js';
 
-export function outputGuardrails(rawAnswer, piiMap = {}, user) {
-  // 1. Unmask PII Tokens back to original values for the client
-  const unmaskedAnswer = unmaskPII(rawAnswer, piiMap);
+/**
+ * Step 15 — Output Guardrails
+ * Section 25: Validates generated answers to prevent PII leakage, toxicity, and unauthorized data leakage.
+ */
+export function outputGuardrails(answer, user, piiMap = {}) {
+  // 1. Unmask PII placeholders if applicable
+  const unmaskedAnswer = unmaskPII(answer, piiMap);
 
-  // 2. Perform output security validation
-  if (unmaskedAnswer.includes('SYSTEM_ERROR_STACK_TRACE')) {
-    return 'An unexpected system error occurred while generating the answer. Please try again.';
+  // 2. Simple output toxicity / security check
+  const forbiddenTerms = ['INTERNAL_CONFIDENTIAL_KEY', 'AWS_SECRET_KEY'];
+  for (const term of forbiddenTerms) {
+    if (unmaskedAnswer.includes(term)) {
+      return {
+        allowed: false,
+        answer: 'Output security violation: Answer contained sensitive internal system secrets.'
+      };
+    }
   }
 
-  return unmaskedAnswer;
+  return {
+    allowed: true,
+    answer: unmaskedAnswer
+  };
 }
 ```
 
@@ -176,7 +216,7 @@ export function outputGuardrails(rawAnswer, piiMap = {}, user) {
 
 In this chapter, we implemented:
 - `inputGuardrails()`: Entryway security pipeline.
-- `checkJailbreak()`: Regex malicious pattern matcher.
+- `detectJailbreak()`: Regex malicious pattern matcher.
 - `maskPII()` / `unmaskPII()`: Reversible token masking engine.
 - `outputGuardrails()`: Post-generation policy verification and PII restoration.
 

@@ -50,7 +50,7 @@ const weatherTool: ITool = {
         const response = await axios.get(url, { responseType: 'text' });
         return JSON.stringify({ cityName, weatherInfo: response.data });
     },
-};
+}
 ```
 
 ### 2. Host CLI Access Tool (`cliAccessTool`)
@@ -70,7 +70,7 @@ const cliAccessTool: ITool = {
             });
         });
     }
-};
+}
 ```
 
 ---
@@ -86,9 +86,10 @@ agent-sdk-sir/src/index.ts
 ### Code
 
 ```typescript
-import { Agent, AgentBuilder } from './app/agent.js';
-import type { ITool } from './app/agent.js';
-import axios from 'axios';
+import { Agent, AgentBuilder } from './app/agent.js'
+import type { ITool } from './app/agent.js'
+import axios from 'axios'
+
 import { exec } from 'child_process';
 
 const weatherTool: ITool = {
@@ -100,7 +101,7 @@ const weatherTool: ITool = {
         const response = await axios.get(url, { responseType: 'text' });
         return JSON.stringify({ cityName, weatherInfo: response.data });
     },
-};
+}
 
 const cliAccessTool: ITool = {
     name: 'execCli',
@@ -114,29 +115,32 @@ const cliAccessTool: ITool = {
             });
         });
     }
-};
+}
 
 async function init() {
-    // 1. Build Coding Agent with CLI Tool
     const agent: Agent = Agent.builder()
         .setIntructions(`You are an expert coding agent`)
         .tool(cliAccessTool)
-        .build();
+        .build()
 
-    // 2. Attach Logging Interceptor
-    agent.attachInterceptor(message => console.log(`Message: ${message.role}: ${message.content}`));
+    const weatherAgent: Agent = Agent.builder()
+        .setIntructions(`You are an expert weather agent`)
+        .tool(weatherTool)
+        .build()
 
-    // 3. Run Query
-    const result = await agent.run('can you build a simple hello world program in c++ on my current project as hello.cpp');
-    
-    // 4. Output Final Trajectory Step
-    if (result && result.length > 0) {
-        console.log('\n--- Final Output ---');
-        console.log(result[result.length - 1]);
-    }
+    const xyzAgent: Agent = Agent.builder()
+        .setIntructions(`You are an expert weather agent`)
+        .tool(weatherTool)
+        .build()
+
+
+    agent.attachInterceptor(message => console.log(`Message: ${message.role}: ${message.content}`))
+
+    const result = await agent.run('can you build a simple hello world program in c++ on my current project as hello.cpp')
+    console.log(result![result?.length! - 1])
 }
 
-init();
+init()
 ```
 
 ---

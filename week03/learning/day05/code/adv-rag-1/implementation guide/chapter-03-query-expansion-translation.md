@@ -34,13 +34,24 @@ Create [`src/rag/query/rewrite.js`](file:///home/aminul/development/gen-ai-cohor
 ```javascript
 import { generateLLM } from '../llmClient.js';
 
-export async function rewriteQuery(originalQuery) {
-  const result = await generateLLM({
-    system: 'Rewrite the user query to be clear, explicit, and self-contained for a vector database search.',
-    user: originalQuery
+/**
+ * Step 2 — Query Rewriting
+ * Section 06: Rewrites the user query for optimal retrieval.
+ */
+export async function rewriteQuery(query) {
+  const response = await generateLLM({
+    system: `
+      Rewrite the user query for retrieval.
+
+      Preserve the original intent.
+      Fix spelling and grammar.
+      Add missing context when obvious.
+      Do not answer the question.
+    `,
+    user: query
   });
 
-  return result.text || originalQuery;
+  return response.text;
 }
 ```
 
@@ -53,13 +64,24 @@ Create [`src/rag/query/stepBack.js`](file:///home/aminul/development/gen-ai-coho
 ```javascript
 import { generateLLM } from '../llmClient.js';
 
+/**
+ * Step 3 — Step-Back Prompting
+ * Section 07: Converts specific user question into broader conceptual question.
+ */
 export async function createStepBackQuery(query) {
-  const result = await generateLLM({
-    system: 'Generate a broader conceptual question that provides background context for the user query.',
+  const response = await generateLLM({
+    system: `
+      Convert the user's specific question
+      into a broader conceptual question.
+
+      Focus on the underlying principles,
+      concepts, or general knowledge required
+      to answer the original question.
+    `,
     user: query
   });
 
-  return result.text || query;
+  return response.text;
 }
 ```
 
@@ -72,21 +94,31 @@ Create [`src/rag/query/subQueries.js`](file:///home/aminul/development/gen-ai-co
 ```javascript
 import { generateLLM } from '../llmClient.js';
 
+/**
+ * Step 4 — Sub-Query Decomposition
+ * Section 08: Decomposes complex user question into 3-5 independent sub-queries.
+ */
 export async function createSubQueries(query) {
-  const result = await generateLLM({
-    system: 'Decompose the question into 3-5 independent retrieval questions. Return JSON: { "queries": ["q1", "q2"] }',
+  const response = await generateLLM({
+    system: `
+      Break the user's question into
+      3-5 independent retrieval questions.
+
+      Return JSON:
+      {
+        "queries": []
+      }
+    `,
     user: query
   });
 
   try {
-    const parsed = JSON.parse(result.text);
-    if (parsed.queries && Array.isArray(parsed.queries)) {
+    const parsed = JSON.parse(response.text);
+    if (Array.isArray(parsed.queries)) {
       return parsed.queries;
     }
   } catch (err) {
-    // Return line fallback if JSON parsing fails
-    const lines = result.text.split('\n').filter((l) => l.trim().length > 0);
-    if (lines.length > 0) return lines;
+    console.warn('[SubQueries] Error parsing sub-query JSON, returning query fallback list.');
   }
 
   return [query];
@@ -102,13 +134,23 @@ Create [`src/rag/query/hyde.js`](file:///home/aminul/development/gen-ai-cohort/w
 ```javascript
 import { generateLLM } from '../llmClient.js';
 
+/**
+ * Step 5 — HyDE (Hypothetical Document Embeddings)
+ * Section 09: Generates hypothetical document passage that would answer the user query.
+ */
 export async function createHyDE(query) {
-  const result = await generateLLM({
-    system: 'Write a hypothetical document paragraph that answers the user question concisely.',
+  const response = await generateLLM({
+    system: `
+      Generate a hypothetical document that
+      would likely contain the answer to the query.
+
+      Do not worry about factual certainty.
+      Focus on terminology and semantic structure.
+    `,
     user: query
   });
 
-  return result.text || query;
+  return response.text;
 }
 ```
 

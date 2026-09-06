@@ -68,10 +68,17 @@ cd week03/learning/day06/code/vectorless-rag-01
 ### `.env.example`
 
 ```env
+# Vectorless RAG & LLM Wiki Environment Configuration
+
+# API Keys (Optional - fallbacks provided for local offline evaluation)
+OPENAI_API_KEY=your_openai_api_key_here
+GEMINI_API_KEY=your_gemini_api_key_here
+
+# System Settings
 NODE_ENV=development
 LOG_LEVEL=info
-OPENAI_API_KEY=your-openai-api-key-here
-GEMINI_API_KEY=your-gemini-api-key-here
+
+# Default Search Parameters
 DEFAULT_MAX_TREE_DEPTH=3
 SUMMARY_PRUNING_THRESHOLD=1.5
 ```

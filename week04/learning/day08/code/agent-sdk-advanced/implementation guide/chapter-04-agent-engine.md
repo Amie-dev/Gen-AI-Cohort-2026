@@ -285,46 +285,71 @@ export class Agent {
     if (lastMsg.role === "developer") {
       return JSON.stringify({
         step: "OUTPUT",
-        text: `[Offline Mode] Processed input with result: ${lastMsg.content}`,
+        text: `Processed developer payload successfully in agent ${this.name}. Result: ${lastMsg.content}`,
       });
     }
 
-    if (this.name === "TriageAgent") {
+    // Check for Handoff intent in query for simulation
+    if (this.name === "TriageAgent" || this.name === "RouterAgent") {
       if (q.includes("weather")) {
         return JSON.stringify({
           step: "HANDOFF",
           targetAgent: "WeatherAgent",
-          reason: "Offline routing weather request to WeatherAgent.",
+          reason: "Query requires weather specialist.",
         });
       }
-      if (q.includes("math") || q.includes("calculate") || q.includes("+")) {
+      if (q.includes("math") || q.includes("calculate") || q.includes("add")) {
         return JSON.stringify({
           step: "HANDOFF",
           targetAgent: "MathAgent",
-          reason: "Offline routing math request to MathAgent.",
+          reason: "Query requires mathematics specialist.",
         });
       }
-      if (q.includes("cli") || q.includes("shell") || q.includes("ls") || q.includes("mkdir")) {
+      if (q.includes("cli") || q.includes("command") || q.includes("dir") || q.includes("list")) {
         return JSON.stringify({
           step: "HANDOFF",
           targetAgent: "DevOpsAgent",
-          reason: "Offline routing CLI request to DevOpsAgent.",
+          reason: "Query requires DevOps command execution specialist.",
         });
       }
     }
 
-    if (this.toolMap.size > 0) {
-      const firstTool = Array.from(this.toolMap.values())[0];
+    // Check for tool execution intents
+    if (q.includes("weather") && this.toolMap.has("fetchWeatherInfo")) {
       return JSON.stringify({
         step: "TOOL_REQUEST",
-        functionName: firstTool.name,
-        input: query,
+        functionName: "fetchWeatherInfo",
+        input: "Goa",
+      });
+    }
+
+    if ((q.includes("math") || q.includes("calculate") || q.includes("2 + 2")) && this.toolMap.has("evaluateMathExpression")) {
+      return JSON.stringify({
+        step: "TOOL_REQUEST",
+        functionName: "evaluateMathExpression",
+        input: "2 + 2 * 10",
+      });
+    }
+
+    if ((q.includes("cli") || q.includes("command")) && this.toolMap.has("execCli")) {
+      return JSON.stringify({
+        step: "TOOL_REQUEST",
+        functionName: "execCli",
+        input: "echo 'Agent SDK Advanced CLI Response'",
+      });
+    }
+
+    if (q.includes("knowledge") && this.toolMap.has("searchKnowledgeBase")) {
+      return JSON.stringify({
+        step: "TOOL_REQUEST",
+        functionName: "searchKnowledgeBase",
+        input: "agent sdk",
       });
     }
 
     return JSON.stringify({
       step: "OUTPUT",
-      text: `[Offline Mode] Response from agent '${this.name}' for query: "${query}"`,
+      text: `[${this.name}] Successfully processed query: "${query}"`,
     });
   }
 }

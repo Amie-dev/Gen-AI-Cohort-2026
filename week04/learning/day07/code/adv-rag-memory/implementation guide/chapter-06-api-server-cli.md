@@ -35,89 +35,110 @@ adv-rag-memory/src/api/server.js
 
 ### Code
 
+## 2. Express REST API Gateway (`src/api/server.js`)
+
+### File Path
+
+```text
+adv-rag-memory/src/api/server.js
+```
+
+### Code
+
 ```javascript
-import express from 'express';
-import { config } from '../config.js';
-import { processAdvRagPipeline } from '../rag/pipeline.js';
-import { mem0Client } from '../memory/mem0.js';
+import express from "express";
+import { config } from "../config.js";
+import { InputGuardrails } from "../guardrails/input.js";
+import { MemorySearch } from "../memory/memorySearch.js";
+import { stmStore } from "../chat/stm.js";
+import { RAGPipeline } from "../rag/pipeline.js";
+import { ContextBuilder } from "../rag/generation/contextBuilder.js";
+import { GenerationLLM } from "../rag/generation/generate.js";
+import { CRAGEvaluator } from "../rag/evaluation/crag.js";
+import { OutputGuardrails } from "../guardrails/output.js";
+import { conversationStore } from "../chat/conversationStore.js";
+import { MemoryQueue } from "../queues/memoryQueue.js";
 
 const app = express();
 app.use(express.json());
 
-// 1. End-to-End RAG + Mem0 Chat Endpoint
-app.post('/chat', async (req, res) => {
-  try {
-    const { userId, message, userContext } = req.body;
+const inputGuardrails = new InputGuardrails();
+const outputGuardrails = new OutputGuardrails();
 
-    if (!userId || !message) {
-      return res.status(400).json({ error: 'Missing userId or message in request body.' });
+/**
+ * Main End-to-End Chat API Endpoint
+ */
+app.post("/chat", async (req, res) => {
+  try {
+    const { userId, sessionId, query } = req.body;
+    if (!userId || !query) {
+      return res.status(400).json({ error: "Missing required fields: userId and query" });
     }
 
-    const result = await processAdvRagPipeline({
-      userId,
-      query: message,
-      userContext: userContext || {},
-    });
+    const currentSession = sessionId || `session_${Date.now()}`;
+    const userContext = { userId, isInternal: true };
 
-    return res.status(200).json({
-      status: 'success',
-      userId,
-      response: result.response,
-      memoriesUsed: result.memoriesUsed,
-      evidenceDocs: result.evidenceDocs,
-      cragEvaluation: result.cragEvaluation,
+    // 1. Input Guardrails (PII Masking & Injection Check)
+    const { cleanQuery, tokenMap } = inputGuardrails.process(query, userContext);
+
+    // 2. Retrieve Mem0 Long-Term User Memory
+    const relevantMemories = await MemorySearch.searchRelevantUserMemories(userId, cleanQuery);
+
+    // 3. Retrieve Short-Term Memory (STM)
+    const stmHistory = await stmStore.getRecentContext(currentSession);
+
+    // 4. Execute Production RAG Pipeline
+    const ragEvidence = await RAGPipeline.executeRAG(cleanQuery, userContext);
+
+    // 5. Context Assembly
+    const contextPayload = ContextBuilder.buildContextPayload(
+      "You are a helpful personalized AI assistant.",
+      relevantMemories,
+      stmHistory,
+      ragEvidence,
+      cleanQuery
+    );
+
+    // 6. Generation LLM Call
+    const rawAnswer = await GenerationLLM.generateAnswer(contextPayload);
+
+    // 7. CRAG Answer Evaluation
+    const cragEval = CRAGEvaluator.evaluate(cleanQuery, contextPayload, rawAnswer);
+
+    // 8. Output Guardrails (Unmask PII)
+    const finalResponse = outputGuardrails.process(rawAnswer, tokenMap);
+
+    // 9. Store STM Turn
+    await stmStore.addTurn(currentSession, "user", query);
+    await stmStore.addTurn(currentSession, "assistant", finalResponse);
+
+    // 10. Log Immutable Conversation
+    await conversationStore.logInteraction(userId, currentSession, query, finalResponse);
+
+    // 11. Queue Async Memory Processing Job
+    await MemoryQueue.enqueueJob({ userId, sessionId: currentSession, userQuery: query, assistantResponse: finalResponse });
+
+    return res.json({
+      success: true,
+      sessionId: currentSession,
+      response: finalResponse,
+      evaluation: cragEval,
+      memoriesUsedCount: relevantMemories.length,
+      ragEvidenceCount: ragEvidence.length,
     });
   } catch (err) {
-    console.error('[API Error /chat]', err.message);
+    console.error("API Error:", err);
     return res.status(500).json({ error: err.message });
   }
 });
 
-// 2. Knowledge Document Ingestion Endpoint
-app.post('/ingest', async (req, res) => {
-  try {
-    const { document, tenantId } = req.body;
+if (process.argv[1] && process.argv[1].endsWith("server.js")) {
+  app.listen(config.port, () => {
+    console.log(`🚀 Production RAG + Mem0 API Gateway running at http://localhost:${config.port}`);
+  });
+}
 
-    if (!document || !document.content) {
-      return res.status(400).json({ error: 'Missing document payload.' });
-    }
-
-    console.log(`[Ingest] Indexing document for tenant: ${tenantId || 'global'}`);
-
-    return res.status(200).json({
-      status: 'success',
-      message: 'Document ingested successfully into Qdrant Vector Store.',
-      docId: `doc_${Date.now()}`,
-    });
-  } catch (err) {
-    return res.status(500).json({ error: err.message });
-  }
-});
-
-// 3. Inspect User Mem0 Memories Endpoint
-app.get('/memories', async (req, res) => {
-  try {
-    const userId = req.query.userId;
-    if (!userId) {
-      return res.status(400).json({ error: 'Missing userId query parameter.' });
-    }
-
-    const memories = await mem0Client.getAllMemories(userId);
-    return res.status(200).json({
-      status: 'success',
-      userId,
-      memories,
-    });
-  } catch (err) {
-    return res.status(500).json({ error: err.message });
-  }
-});
-
-app.listen(config.port, () => {
-  console.log(`=======================================================`);
-  console.log(`🚀 Production Advanced RAG + Mem0 Server running on port ${config.port}`);
-  console.log(`=======================================================`);
-});
+export { app };
 ```
 
 ---
@@ -133,42 +154,124 @@ adv-rag-memory/index.js
 ### Code
 
 ```javascript
-import readline from 'readline';
-import { processAdvRagPipeline } from './src/rag/pipeline.js';
+import { InputGuardrails } from "./src/guardrails/input.js";
+import { MemorySearch } from "./src/memory/memorySearch.js";
+import { stmStore } from "./src/chat/stm.js";
+import { RAGPipeline } from "./src/rag/pipeline.js";
+import { ContextBuilder } from "./src/rag/generation/contextBuilder.js";
+import { GenerationLLM } from "./src/rag/generation/generate.js";
+import { CRAGEvaluator } from "./src/rag/evaluation/crag.js";
+import { OutputGuardrails } from "./src/guardrails/output.js";
+import { conversationStore } from "./src/chat/conversationStore.js";
+import { MemoryQueue } from "./src/queues/memoryQueue.js";
+import { runMemoryWorkerPass } from "./src/memory/memoryWorker.js";
+import { mem0Client } from "./src/memory/mem0.js";
 
-const rl = readline.createInterface({
-  input: process.stdin,
-  output: process.stdout,
-});
+async function executeTurn(userId, sessionId, rawQuery) {
+  console.log(`\n=================================================================`);
+  console.log(`👤 User Query: "${rawQuery}"`);
+  console.log(`=================================================================`);
 
-console.log('===========================================================');
-console.log('🤖 Advanced RAG + Mem0 Interactive CLI');
-console.log('===========================================================');
+  const userContext = { userId, isInternal: true };
+  const inputGuardrails = new InputGuardrails();
+  const outputGuardrails = new OutputGuardrails();
 
-const userId = 'cli_user_01';
+  // Step 2: Input Guardrails & PII Masking
+  const { cleanQuery, maskedCount, tokenMap } = inputGuardrails.process(rawQuery, userContext);
+  if (maskedCount > 0) {
+    console.log(`🛡️  [Input Guardrails] Masked ${maskedCount} PII token(s) -> "${cleanQuery}"`);
+  }
 
-function promptUser() {
-  rl.question('\n👤 Enter query (or type "exit" to quit): ', async (query) => {
-    if (query.trim().toLowerCase() === 'exit') {
-      console.log('Goodbye!');
-      rl.close();
-      return;
-    }
+  // Step 3: Mem0 Memory Search
+  console.log(`🧠 [Mem0 Memory Layer] Searching user-specific facts...`);
+  const relevantMemories = await MemorySearch.searchRelevantUserMemories(userId, cleanQuery);
+  console.log(`   └─ Found ${relevantMemories.length} relevant long-term memory item(s).`);
 
-    try {
-      const result = await processAdvRagPipeline({ userId, query });
-      console.log('\n🤖 Response:', result.response);
-      console.log('🧠 Memories Retrieved:', result.memoriesUsed.length);
-      console.log('🔎 Evidence Docs Used:', result.evidenceDocs.length);
-    } catch (err) {
-      console.error('❌ Error:', err.message);
-    }
+  // Step 4: STM Retrieval
+  const stmHistory = await stmStore.getRecentContext(sessionId);
+  console.log(`💬 [STM Buffer] Current sliding window count: ${stmHistory.length} message turn(s).`);
 
-    promptUser();
-  });
+  // Step 5: Production RAG Knowledge Retrieval
+  const ragEvidence = await RAGPipeline.executeRAG(cleanQuery, userContext);
+
+  // Step 6: Context Assembly
+  const contextPayload = ContextBuilder.buildContextPayload(
+    "You are a personalized AI Assistant.",
+    relevantMemories,
+    stmHistory,
+    ragEvidence,
+    cleanQuery
+  );
+
+  // Step 7: Generation LLM
+  console.log(`🤖 [LLM Generation] Generating personalized answer...`);
+  const rawAnswer = await GenerationLLM.generateAnswer(contextPayload);
+
+  // Step 8: CRAG Evaluation
+  const cragEval = CRAGEvaluator.evaluate(cleanQuery, contextPayload, rawAnswer);
+  console.log(`⚖️  [CRAG Evaluation] Score: ${cragEval.score}/10 | Grounded: ${cragEval.isGood}`);
+
+  // Step 9: Output Guardrails (Unmask PII)
+  const finalAnswer = outputGuardrails.process(rawAnswer, tokenMap);
+
+  // Step 10: Store Conversation Logs & STM
+  await stmStore.addTurn(sessionId, "user", rawQuery);
+  await stmStore.addTurn(sessionId, "assistant", finalAnswer);
+  await conversationStore.logInteraction(userId, sessionId, rawQuery, finalAnswer);
+
+  // Step 11: Queue Memory Processing
+  await MemoryQueue.enqueueJob({ userId, sessionId, userQuery: rawQuery, assistantResponse: finalAnswer });
+
+  return finalAnswer;
 }
 
-promptUser();
+async function runDemo() {
+  console.log("==========================================================");
+  console.log("🚀 STARTING PRODUCTION RAG + MEM0 MEMORY DEMONSTRATION");
+  console.log("==========================================================\n");
+
+  const userId = "user_aminul_101";
+  const sessionId = "session_adv_rag_mem_001";
+
+  // Pre-seed a Mem0 preference
+  await mem0Client.addMemory(userId, "User prefers TypeScript and Node.js for backend projects.", "preference");
+  await mem0Client.addMemory(userId, "User works on vLLM GPU inference optimization.", "professional");
+
+  // TURN 1: PII Masking + Technical Question
+  const ans1 = await executeTurn(
+    userId,
+    sessionId,
+    "Hi, my name is Alex and my email is alex.dev@example.com. I prefer PostgreSQL for my database projects."
+  );
+  console.log(`\n💬 [Assistant Response]:\n${ans1}`);
+
+  // TURN 2: Personalization relying on Mem0 + RAG
+  const ans2 = await executeTurn(
+    userId,
+    sessionId,
+    "Which database and memory framework should I choose for my new AI backend project?"
+  );
+  console.log(`\n💬 [Assistant Response]:\n${ans2}`);
+
+  // RUN BACKGROUND MEMORY WORKER
+  console.log("\n==========================================================");
+  console.log("🌙 EXECUTING ASYNCHRONOUS BACKGROUND MEMORY WORKER PASS");
+  console.log("==========================================================");
+  const workerResult = await runMemoryWorkerPass();
+  console.log("✨ Worker Result:", workerResult);
+
+  console.log("\n==========================================================");
+  console.log("📊 FINAL MEM0 LONG-TERM MEMORY STORE STATE");
+  console.log("==========================================================");
+  const allMems = await mem0Client.getAllMemories(userId);
+  console.dir(allMems, { depth: null });
+
+  console.log("\n==========================================================");
+  console.log("✅ DEMONSTRATION COMPLETE");
+  console.log("==========================================================");
+}
+
+runDemo().catch((err) => console.error("Execution Error:", err));
 ```
 
 ---

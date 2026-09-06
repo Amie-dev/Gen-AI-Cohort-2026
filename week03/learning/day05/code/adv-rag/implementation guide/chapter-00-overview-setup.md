@@ -136,28 +136,25 @@ npm install
 Create [`.env.example`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag/.env.example) and copy to `.env`:
 
 ```env
-# Express
 PORT=8000
+OPENAI_API_KEY=your_openai_api_key_here
 
-# Redis (BullMQ backing store)
+# Redis Configuration (BullMQ)
 REDIS_HOST=127.0.0.1
 REDIS_PORT=6379
 
-# Qdrant Vector Database
+# Qdrant Vector Database Configuration
 QDRANT_URL=http://127.0.0.1:6333
 QDRANT_COLLECTION=adv_rag_documents
 
-# OpenAI API Settings
-OPENAI_API_KEY=sk-proj-your-actual-key
+# OpenAI Model Configurations
 EMBEDDING_MODEL=text-embedding-3-small
 EMBEDDING_DIMENSIONS=1536
 CHAT_MODEL=gpt-4o-mini
 
-# Chunking Strategy
+# RAG Pipeline Tuning Parameters
 CHUNK_SIZE=1000
 CHUNK_OVERLAP=200
-
-# Retrieval & Fusion Parameters
 RETRIEVAL_TOP_K=5
 RRF_K=60
 RETRIEVAL_FINAL_K=5

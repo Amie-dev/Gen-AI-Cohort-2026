@@ -13,22 +13,49 @@ Create [`src/rag/evaluation/crag.js`](file:///home/aminul/development/gen-ai-coh
 ```javascript
 import { generateLLM } from '../llmClient.js';
 
+/**
+ * Step 14 — CRAG Evaluation (Corrective RAG)
+ * Section 21, 22, 23: Evaluates answer groundedness, relevance, completeness, hallucination.
+ */
 export async function evaluateAnswer(query, answer, context) {
-  const result = await generateLLM({
-    system: 'Evaluate the answer based on context. Return JSON: { "score": 8, "grounded": true, "missing": [] }',
-    user: `Question: "${query}"\nContext:\n${context}\nAnswer:\n${answer}`
+  const response = await generateLLM({
+    system: `
+      Evaluate the answer.
+
+      Score from 0 to 10.
+
+      Check:
+      1. Groundedness
+      2. Relevance
+      3. Completeness
+      4. Hallucination
+
+      Return JSON format:
+      {
+        "score": number,
+        "missing": string[]
+      }
+    `,
+    user: JSON.stringify({
+      query,
+      answer,
+      context
+    })
   });
 
   try {
-    const parsed = JSON.parse(result.text);
-    return {
-      score: parsed.score ?? 8,
-      grounded: parsed.grounded ?? true,
-      missing: Array.isArray(parsed.missing) ? parsed.missing : []
-    };
+    const parsed = JSON.parse(response.text);
+    if (typeof parsed.score === 'number') {
+      return parsed;
+    }
   } catch (err) {
-    return { score: 8, grounded: true, missing: [] };
+    console.warn('[CRAG Evaluator] Parsing error, assuming pass score.');
   }
+
+  return {
+    score: 8,
+    missing: []
+  };
 }
 ```
 
@@ -41,10 +68,22 @@ export async function evaluateAnswer(query, answer, context) {
 Create [`src/rag/generation/contextBuilder.js`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/src/rag/generation/contextBuilder.js):
 
 ```javascript
+/**
+ * Step 12 — Context Construction
+ * Section 19: Formats top-K retrieved documents into clear prompt context with source citations.
+ */
 export function buildContext(documents) {
-  if (!documents || documents.length === 0) return 'No context available.';
+  if (!documents || documents.length === 0) {
+    return 'No relevant document context found.';
+  }
+
   return documents
-    .map((doc, i) => `[Source ${i + 1}] (${doc.title} | Source: ${doc.source})\n${doc.text}`)
+    .map((doc, index) => {
+      return `SOURCE ${index + 1} [${doc.source || 'KnowledgeBase'}]
+Title: ${doc.title}
+Content:
+${doc.text}`;
+    })
     .join('\n\n---\n\n');
 }
 ```
@@ -58,13 +97,33 @@ Create [`src/rag/generation/generateAnswer.js`](file:///home/aminul/development/
 ```javascript
 import { generateLLM } from '../llmClient.js';
 
+/**
+ * Step 13 — Grounded Generation
+ * Section 20: Generates grounded answer using provided retrieved context.
+ */
 export async function generateAnswer(query, context) {
-  const result = await generateLLM({
-    system: 'You are a grounded assistant. Answer the user question using ONLY the provided context.',
-    user: `Context:\n${context}\n\nQuestion: ${query}`
+  const response = await generateLLM({
+    system: `
+      You are a grounded enterprise assistant.
+
+      Answer using the provided context.
+
+      Rules:
+      - Do not invent facts.
+      - If the context is insufficient, say so.
+      - Prefer retrieved information.
+      - Cite sources when available.
+    `,
+    user: `
+      Question:
+      ${query}
+
+      Context:
+      ${context}
+    `
   });
 
-  return result.text || 'Unable to generate answer.';
+  return response.text;
 }
 ```
 
@@ -78,13 +137,9 @@ Create [`src/rag/ragPipeline.js`](file:///home/aminul/development/gen-ai-cohort/
 import { inputGuardrails } from './guardrails/input.js';
 import { rewriteQuery } from './query/rewrite.js';
 import { createStepBackQuery } from './query/stepBack.js';
-import { createSubQueries } from './query/subQueries.js';
 import { createHyDE } from './query/hyde.js';
-import { routeQuery } from './routing/queryRouter.js';
-import { queryVectorStore } from './adapters/vectorAdapter.js';
-import { querySQLStore } from './adapters/sqlAdapter.js';
-import { queryMongoStore } from './adapters/mongoAdapter.js';
-import { queryS3Store } from './adapters/s3Adapter.js';
+import { createSubQueries } from './query/subQueries.js';
+import { executeMultiQueryRetrieval } from './retrieval/vectorSearch.js';
 import { filterResults } from './retrieval/filtering.js';
 import { reciprocalRankFusion } from './retrieval/rrf.js';
 import { rerank } from './retrieval/reranker.js';
@@ -93,23 +148,42 @@ import { generateAnswer } from './generation/generateAnswer.js';
 import { evaluateAnswer } from './evaluation/crag.js';
 import { outputGuardrails } from './guardrails/output.js';
 
-export async function productionRAG(userQuery, user = { id: 'usr_default', tenantId: 'tenant_1', accessLevel: 5 }) {
-  console.log(`\n🚀 Starting Master RAG Pipeline for query: "${userQuery}"`);
+/**
+ * Section 36 — Complete JavaScript Production RAG Pipeline
+ * Combines all 13 production steps into a unified async workflow.
+ */
+export async function productionRAG(userQuery, user, maxRetries = 2) {
+  console.log(`\n======================================================`);
+  console.log(`[RAG Pipeline] Processing query: "${userQuery}"`);
+  console.log(`======================================================`);
 
+  // --------------------------------
   // 1. INPUT GUARDRAILS
+  // --------------------------------
   const guardResult = await inputGuardrails(userQuery, user);
   if (!guardResult.allowed) {
-    return { success: false, answer: guardResult.message };
+    console.warn(`[Pipeline] Input guardrail blocked query: ${guardResult.message}`);
+    return {
+      allowed: false,
+      answer: guardResult.message,
+      score: 0
+    };
   }
 
-  let currentQuery = guardResult.sanitizedQuery;
-  const piiMap = guardResult.piiMap || {};
-  const maxRetries = 3;
+  const query = guardResult.sanitizedQuery;
+  const piiMap = guardResult.piiMap;
 
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    console.log(`🔄 Execution Attempt ${attempt}/${maxRetries}`);
+  let currentQuery = query;
+  let finalAnswer = '';
+  let finalScore = 0;
 
-    // 2. QUERY EXPANSION
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    console.log(`\n--- Attempt ${attempt + 1}/${maxRetries + 1} ---`);
+
+    // --------------------------------
+    // 2. QUERY TRANSLATION (PARALLEL)
+    // --------------------------------
+    console.log(`[Pipeline] Step 2-5: Executing parallel query translation...`);
     const [rewritten, stepBack, hyde, subQueries] = await Promise.all([
       rewriteQuery(currentQuery),
       createStepBackQuery(currentQuery),
@@ -117,62 +191,86 @@ export async function productionRAG(userQuery, user = { id: 'usr_default', tenan
       createSubQueries(currentQuery)
     ]);
 
-    const searchQueries = [rewritten, stepBack, hyde, ...subQueries];
+    const searchQueries = [
+      currentQuery,
+      rewritten,
+      stepBack,
+      hyde,
+      ...subQueries
+    ];
+    console.log(`[Pipeline] Generated ${searchQueries.length} query variants.`);
 
-    // 3 & 4. ROUTING & ADAPTER RETRIEVAL
-    const retrievalPromises = searchQueries.map(async (searchQ) => {
-      const targetStore = await routeQuery(searchQ);
-      if (targetStore === 'AUTH_DB') return await querySQLStore(searchQ, user);
-      if (targetStore === 'S3') return await queryS3Store(searchQ, user);
-      if (targetStore === 'MULTI_STORE') {
-        const [sql, vec] = await Promise.all([querySQLStore(searchQ, user), queryVectorStore(searchQ, user)]);
-        return [...sql, ...vec];
-      }
-      return await queryVectorStore(searchQ, user);
-    });
+    // --------------------------------
+    // 3 & 4. MULTI-SOURCE RETRIEVAL
+    // --------------------------------
+    console.log(`[Pipeline] Step 6-8: Executing multi-source retrieval...`);
+    const retrievalResults = await executeMultiQueryRetrieval(searchQueries);
 
-    const rawResults = await Promise.all(retrievalPromises);
-
+    // --------------------------------
     // 5. FILTERING
-    const filtered = filterResults(rawResults, user);
+    // --------------------------------
+    console.log(`[Pipeline] Step 9: Filtering candidates by tenant & permissions...`);
+    const filteredResults = filterResults(retrievalResults, user);
 
-    // 6. RECIPROCAL RANK FUSION
-    const fused = reciprocalRankFusion(filtered);
+    // --------------------------------
+    // 6. RRF FUSION
+    // --------------------------------
+    console.log(`[Pipeline] Step 10: Merging candidate lists via Reciprocal Rank Fusion (k=60)...`);
+    const fusedResults = reciprocalRankFusion(filteredResults);
 
-    // 7. RE-RANKING
-    const reranked = await rerank(currentQuery, fused);
-    const topKDocs = reranked.slice(0, 5);
+    // --------------------------------
+    // 7 & 8. RE-RANKING & TOP-K
+    // --------------------------------
+    console.log(`[Pipeline] Step 11: Re-ranking candidates...`);
+    const reranked = await rerank(currentQuery, fusedResults);
+    const topK = reranked.slice(0, 5);
 
-    // 8 & 9. CONTEXT & GENERATION
-    const context = buildContext(topKDocs);
-    const rawAnswer = await generateAnswer(currentQuery, context);
+    // --------------------------------
+    // 9. CONTEXT BUILDING
+    // --------------------------------
+    console.log(`[Pipeline] Step 12: Constructing prompt context from ${topK.length} documents...`);
+    const context = buildContext(topK);
 
-    // 10. CRAG EVALUATION
-    const evaluation = await evaluateAnswer(currentQuery, rawAnswer, context);
+    // --------------------------------
+    // 10. GROUNDED GENERATION
+    // --------------------------------
+    console.log(`[Pipeline] Step 13: Generating grounded answer...`);
+    const answer = await generateAnswer(currentQuery, context);
 
-    // 11. OUTPUT GUARDRAILS & SUCCESS CHECK
+    // --------------------------------
+    // 11. CRAG EVALUATION
+    // --------------------------------
+    console.log(`[Pipeline] Step 14: Evaluating answer groundedness & completeness (CRAG)...`);
+    const evaluation = await evaluateAnswer(currentQuery, answer, context);
+    console.log(`[Pipeline] CRAG Evaluation Score: ${evaluation.score}/10`);
+
     if (evaluation.score >= 6) {
-      const finalAnswer = outputGuardrails(rawAnswer, piiMap, user);
-      return {
-        success: true,
-        answer: finalAnswer,
-        score: evaluation.score,
-        attempts: attempt,
-        sources: topKDocs.map((d) => ({ id: d.id, title: d.title, source: d.source, score: d.score }))
-      };
+      finalAnswer = answer;
+      finalScore = evaluation.score;
+      break;
     }
 
+    // Prepare corrective query modification for next retry
     if (evaluation.missing && evaluation.missing.length > 0) {
-      currentQuery = `${currentQuery} ${evaluation.missing.join(' ')}`;
+      currentQuery = `${query} ${evaluation.missing.join(' ')}`;
+      console.log(`[Pipeline CRAG Retry] Appending missing keywords to query: "${currentQuery}"`);
+    } else {
+      finalAnswer = answer;
+      finalScore = evaluation.score;
+      break;
     }
   }
 
+  // --------------------------------
+  // 12. OUTPUT GUARDRAILS
+  // --------------------------------
+  console.log(`[Pipeline] Step 15: Executing output guardrails & unmasking PII...`);
+  const finalOutput = outputGuardrails(finalAnswer, user, piiMap);
+
   return {
-    success: false,
-    answer: 'Unable to retrieve sufficient grounded information to complete request.',
-    score: 0,
-    attempts: maxRetries,
-    sources: []
+    allowed: true,
+    answer: finalOutput.answer,
+    score: finalScore
   };
 }
 ```

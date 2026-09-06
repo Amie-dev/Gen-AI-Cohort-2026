@@ -48,31 +48,34 @@ Create [`src/retrieval/rrf.js`](file:///home/aminul/development/gen-ai-cohort/we
 import { config } from "../config.js";
 
 /**
- * Reciprocal Rank Fusion (RRF)
- * Formula: RRF(d) = Sum( 1 / (k + rank_i(d)) )
+ * Step 10: Reciprocal Rank Fusion (RRF)
+ * Combines multiple ranked result lists into a single unified ranking.
+ * Formula: RRF(d) = sum( 1 / (k + rank) )
  */
-export function reciprocalRankFusion(documents, k = config.retrieval.rrfK) {
-  const map = new Map();
+export function reciprocalRankFusion(rankedLists, k = config.retrieval.rrfK) {
+  const scores = new Map();
 
-  documents.forEach((doc, index) => {
-    const rank = index + 1; // 1-based rank position
-    const contribution = 1 / (k + rank);
-    const docId = doc.id || doc.text;
+  for (const list of rankedLists) {
+    if (!Array.isArray(list)) continue;
+    list.forEach((doc, index) => {
+      const rank = index + 1; // 1-based rank
+      const contribution = 1 / (k + rank);
 
-    if (map.has(docId)) {
-      const existing = map.get(docId);
-      existing.rrfScore += contribution;
-      existing.matchedCount += 1;
-    } else {
-      map.set(docId, {
-        ...doc,
-        rrfScore: contribution,
-        matchedCount: 1,
-      });
-    }
-  });
+      if (!scores.has(doc.id)) {
+        scores.set(doc.id, {
+          ...doc,
+          rrfScore: contribution,
+          appearanceCount: 1,
+        });
+      } else {
+        const existing = scores.get(doc.id);
+        existing.rrfScore += contribution;
+        existing.appearanceCount += 1;
+      }
+    });
+  }
 
-  return Array.from(map.values()).sort((a, b) => b.rrfScore - a.rrfScore);
+  return [...scores.values()].sort((a, b) => b.rrfScore - a.rrfScore);
 }
 ```
 
@@ -88,40 +91,68 @@ import { config } from "../config.js";
 
 const openai = new OpenAI({ apiKey: config.openai.apiKey });
 
+/**
+ * Step 11: Re-Ranking Layer
+ * Re-ranks candidates by computing deep semantic relevance against the query.
+ */
 export async function rerank(query, candidates) {
-  if (candidates.length === 0) return [];
+  if (candidates.length <= 1) return candidates;
 
-  console.log(`⭐ [Reranker] Evaluating ${candidates.length} candidate chunk(s)...`);
+  try {
+    const promptPayload = candidates.map((c, i) => `[Doc ${i}] (ID: ${c.id})\n${c.text}`).join("\n\n");
 
-  const rerankedPromises = candidates.map(async (doc) => {
-    try {
-      const res = await openai.chat.completions.create({
-        model: config.openai.chatModel,
-        temperature: 0.0,
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are a relevance scoring assistant. Evaluate how relevant the text passage is to the user query on a scale of 0 to 10. Respond ONLY with a integer score between 0 and 10.",
+    const completion = await openai.chat.completions.create({
+      model: config.openai.chatModel,
+      temperature: 0.0,
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "reranking",
+          strict: true,
+          schema: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              rankedDocIds: {
+                type: "array",
+                description: "Doc IDs ordered by relevance to the query (highest first).",
+                items: { type: "string" },
+              },
+            },
+            required: ["rankedDocIds"],
           },
-          {
-            role: "user",
-            content: `Query: "${query}"\n\nPassage: "${doc.text}"`,
-          },
-        ],
-      });
+        },
+      },
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a semantic re-ranker. Given a user query and candidate documents, " +
+            "evaluate each document's exact relevance and return an ordered list of doc IDs from most to least relevant.",
+        },
+        { role: "user", content: `Query: ${query}\n\nCandidates:\n${promptPayload}` },
+      ],
+    });
 
-      const scoreStr = res.choices[0]?.message?.content?.trim() || "5";
-      const score = parseInt(scoreStr, 10) || 5;
+    const parsed = JSON.parse(completion.choices[0]?.message?.content ?? "{}");
+    const rankedIds = parsed.rankedDocIds || [];
 
-      return { ...doc, score };
-    } catch (err) {
-      return { ...doc, score: doc.score || 5 };
+    const map = new Map(candidates.map((c) => [c.id, c]));
+    const reranked = [];
+
+    for (const id of rankedIds) {
+      if (map.has(id)) {
+        reranked.push(map.get(id));
+        map.delete(id);
+      }
     }
-  });
 
-  const rerankedDocs = await Promise.all(rerankedPromises);
-  return rerankedDocs.sort((a, b) => b.score - a.score);
+    // Append remaining candidates that were not in the re-rank list
+    return [...reranked, ...map.values()];
+  } catch (err) {
+    console.error("⚠️ Re-ranking failed, keeping RRF order:", err.message);
+    return candidates;
+  }
 }
 ```
 
@@ -139,11 +170,16 @@ import { config } from "../config.js";
 
 const openai = new OpenAI({ apiKey: config.openai.apiKey });
 
+/**
+ * Step 14: Corrective RAG (CRAG) Evaluator
+ * Evaluates the generated answer for Groundedness, Relevance, Completeness, and Hallucination.
+ * Returns a score out of 10 and missing keywords for retries.
+ */
 export async function evaluateAnswer(query, answer, context) {
   try {
-    const res = await openai.chat.completions.create({
+    const completion = await openai.chat.completions.create({
       model: config.openai.chatModel,
-      temperature: 0.1,
+      temperature: 0.0,
       response_format: {
         type: "json_schema",
         json_schema: {
@@ -153,15 +189,25 @@ export async function evaluateAnswer(query, answer, context) {
             type: "object",
             additionalProperties: false,
             properties: {
-              score: { type: "integer", description: "Relevance & completeness score 0-10" },
-              grounded: { type: "boolean", description: "Is answer fully supported by context?" },
+              score: {
+                type: "number",
+                description: "Overall quality rating from 0 to 10.",
+              },
+              grounded: {
+                type: "boolean",
+                description: "True if all claims are supported by context.",
+              },
+              relevant: {
+                type: "boolean",
+                description: "True if the answer directly answers the query.",
+              },
               missing: {
                 type: "array",
+                description: "List of missing concepts or keywords needed for a complete answer.",
                 items: { type: "string" },
-                description: "Missing topics or keywords needed for retry search",
               },
             },
-            required: ["score", "grounded", "missing"],
+            required: ["score", "grounded", "relevant", "missing"],
           },
         },
       },
@@ -169,25 +215,22 @@ export async function evaluateAnswer(query, answer, context) {
         {
           role: "system",
           content:
-            "You are a CRAG (Corrective RAG) evaluation agent. Assess if the generated answer accurately and completely answers the question based ONLY on the context. Return JSON with score (0-10), grounded (boolean), and missing (array of missing keywords).",
+            "You are an impartial evaluator for a RAG system.\n" +
+            "Evaluate the generated answer against the user query and context.\n" +
+            "Rate overall quality from 0 to 10 (>= 6 is passing).\n" +
+            "Identify any missing concepts if incomplete.",
         },
         {
           role: "user",
-          content: `Question: "${query}"\n\nContext:\n${context}\n\nGenerated Answer:\n${answer}`,
+          content: JSON.stringify({ query, answer, context }),
         },
       ],
     });
 
-    const parsed = JSON.parse(res.choices[0]?.message?.content || "{}");
-
-    return {
-      score: parsed.score ?? 7,
-      grounded: parsed.grounded ?? true,
-      missing: Array.isArray(parsed.missing) ? parsed.missing : [],
-    };
+    return JSON.parse(completion.choices[0]?.message?.content ?? '{"score": 7, "grounded": true, "relevant": true, "missing": []}');
   } catch (err) {
-    console.error("⚠️ CRAG evaluation failed, passing default:", err.message);
-    return { score: 8, grounded: true, missing: [] };
+    console.error("⚠️ CRAG Evaluation error, default pass:", err.message);
+    return { score: 7, grounded: true, relevant: true, missing: [] };
   }
 }
 ```
@@ -198,7 +241,7 @@ export async function evaluateAnswer(query, answer, context) {
 
 In this chapter, we built:
 - `reciprocalRankFusion()`: Fuses ranked lists across multi-query variants using $RRF(d) = \sum \frac{1}{k + r(d)}$.
-- `rerank()`: LLM cross-encoder relevance scoring system.
-- `evaluateAnswer()`: CRAG self-reflection agent producing a score (0-10), grounded status, and missing keyword retry payload.
+- `rerank()`: Semantic re-ranker evaluating candidate document relevance against the query.
+- `evaluateAnswer()`: CRAG self-reflection agent producing a score (0-10), grounded status, relevance status, and missing keyword retry payload.
 
-In [**Chapter 06 — Grounded Context, Answer Synthesis & Pipeline**](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag/implementation%20guide/chapter-06-context-generation-pipeline.md), we will complete context building, answer synthesis, and the 13-step master RAG orchestrator.
+In [**Chapter 06 — Grounded Context, Answer Synthesis & Pipeline**](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag/implementation%20guide/chapter-06-context-generation-pipeline.md), we will complete context building, answer synthesis, and the master RAG orchestrator.

@@ -143,7 +143,7 @@ export class Agent {
   constructor(builder: AgentBuilder) {
     this.toolMap = new Map();
     this.openai = new Openai({
-      apiKey: process.env.OPENAI_API_KEY || "",
+      apiKey: "",
     });
     this.interceptors = [];
 
@@ -187,7 +187,7 @@ export class Agent {
     this.messageHistory.push({ role: "user", content: query });
 
     for (let i = 0; i < this.MAX_LOOP; i++) {
-      // Call LLM (SYSTEM PROMPT + MESSAGE HISTORY)
+      // .. LLMResponse = Call LLM (SYSTEM PROMT + MESSAGE HISTORY)
       const llmResponse = await this.openai.chat.completions.create({
         model: "gpt-4o",
         messages: [
@@ -209,11 +209,18 @@ export class Agent {
       // Parse the Raw LLM Response to JSON Object
       const parsedReult = JSON.parse(rawLLMResponse);
 
-      // If LLMResponse.step === "OUTPUT" break (Stop Condition)
+      // if LLMResponse.step === "OUTPUT" break (Stop Condition)
       if (parsedReult.step.toLowerCase() === "output")
         return this.messageHistory;
 
-      // If LLMResponse.step === "TOOL_REQUEST"
+      // if LLMResponse.step === "TOOL_REQUEST"
+      
+      /**
+       *     tool =  ToolMap . find ( LLMResponse.functionName )
+       *     toolResult = tool.executor(LLMResponse.input)
+       *     Append toolResult to Message HISTORY
+       *      continue
+       */
       if (parsedReult.step.toLowerCase() === "tool_request") {
         const { functionName, input } = parsedReult;
         const tool = this.toolMap.get(functionName);

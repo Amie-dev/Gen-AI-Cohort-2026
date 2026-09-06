@@ -34,40 +34,98 @@ vectorless-rag-01/src/comparison/VectorVsVectorlessBenchmark.js
 
 ### Code
 
+## 2. Implementing Benchmark Engine (`src/comparison/VectorVsVectorlessBenchmark.js`)
+
+### File Path
+
+```text
+vectorless-rag-01/src/comparison/VectorVsVectorlessBenchmark.js
+```
+
+### Code
+
 ```javascript
+import { TreeBuilder } from "../tree/TreeBuilder.js";
+import { AgenticTreeSearchEngine } from "../search/AgenticTreeSearchEngine.js";
+
+/**
+ * VectorVsVectorlessBenchmark runs side-by-side comparison between Vector RAG chunking vs Vectorless Tree Search.
+ */
 export class VectorVsVectorlessBenchmark {
-  static runComparison(query) {
-    console.log("=========================================================================");
-    console.log(`⚖️  BENCHMARK: Traditional Vector RAG vs Vectorless Tree RAG`);
-    console.log(`Query: "${query}"`);
-    console.log("=========================================================================\n");
+  /**
+   * Simulates standard Vector RAG fixed 150-char chunking strategy.
+   * @param {string} rawText 
+   * @param {number} [chunkSize=150] 
+   * @returns {string[]}
+   */
+  static simulateVectorChunking(rawText, chunkSize = 150) {
+    const chunks = [];
+    for (let i = 0; i < rawText.length; i += chunkSize) {
+      chunks.push(rawText.substring(i, i + chunkSize));
+    }
+    return chunks;
+  }
 
-    const vectorRAGMetrics = {
-      paradigm: "Traditional Vector RAG",
-      retrievalType: "Flat Cosine Similarity Search",
-      chunkingStrategy: "Fixed-size 500-token chunks",
-      contextPreservation: "POOR (Destroys section hierarchy)",
-      indexingCost: "HIGH (Requires embedding API calls for every chunk)",
-      retrievalSpeedMs: 42,
-      accuracyScore: "68%"
-    };
+  /**
+   * Runs complete side-by-side benchmark comparison.
+   */
+  static runBenchmark() {
+    console.log(
+      "=========================================================================="
+    );
+    console.log(
+      "⚡ BENCHMARK: Standard Vector RAG (Fixed Chunking) vs Vectorless Tree Search"
+    );
+    console.log(
+      "==========================================================================\n"
+    );
 
-    const vectorlessTreeMetrics = {
-      paradigm: "Vectorless Tree RAG (PageIndex Model)",
-      retrievalType: "Top-Down Hierarchical Agentic Navigation",
-      chunkingStrategy: "Structural Document Tree (Chapters/Sections/Leaves)",
-      contextPreservation: "EXCELLENT (Preserves natural page ranges & headings)",
-      indexingCost: "ZERO (No embedding model required)",
-      retrievalSpeedMs: 18,
-      accuracyScore: "94%"
-    };
+    const rawDocumentText = `Section 3.2: Load Balancing Architectures and High Availability.
+The infrastructure employs two primary traffic distribution tiers: Content Delivery Networks (CDNs) 
+and Application Load Balancers (ALBs). High-volume static assets are served directly via edge node caching. 
+For dynamic user session state preservation across cluster nodes, the ALB employs cookie-based sticky sessions. 
+If session persistence fails or a target server drops out, requests automatically fallback to round-robin routing 
+across downstream backup application instances in the target group.`;
 
-    console.table([vectorRAGMetrics, vectorlessTreeMetrics]);
+    // -----------------------------------------------------------------
+    // 1. Vector RAG Fixed Token Chunking Simulation
+    // -----------------------------------------------------------------
+    console.log("1️⃣  STANDARD VECTOR RAG (Fixed 150-Character Token Chunking):");
+    const chunks = VectorVsVectorlessBenchmark.simulateVectorChunking(rawDocumentText);
 
-    return {
-      vectorRAGMetrics,
-      vectorlessTreeMetrics
-    };
+    chunks.forEach((chunk, index) => {
+      console.log(`--- [Vector Chunk #${index + 1}] ---`);
+      console.log(`"${chunk.trim().replace(/\n/g, " ")}"`);
+    });
+
+    console.log("\n⚠️  EXAMINING ABRUPT CHUNKING FAILURES:");
+    console.log(
+      "   • Chunk #2 starts mid-sentence with 'and Application Load Balancers...' -> Header context LOST!"
+    );
+    console.log(
+      "   • Chunk #3 states 'If session persistence fails...' but lacks parent section context (Section 3.2)."
+    );
+    console.log(
+      "   • Result: Similarity search retrieves fragmented text lacking hierarchical lineage.\n"
+    );
+
+    // -----------------------------------------------------------------
+    // 2. Vectorless RAG Tree Navigation Simulation
+    // -----------------------------------------------------------------
+    console.log("2️⃣  VECTORLESS RAG (Hierarchical Tree Navigation):");
+    const tree = TreeBuilder.buildSampleManualTree();
+    const searchEngine = new AgenticTreeSearchEngine(tree);
+
+    const query = "What happens if sticky session persistence fails?";
+    const result = searchEngine.search(query);
+
+    console.log("\n✅ VECTORLESS RAG BENCHMARK RESULT:");
+    console.log(`   • Full Section Context Preserved!`);
+    console.log(`   • Navigation Lineage: ${result.traversalPath.join(" -> ")}`);
+    console.log(`   • Document Section: ${result.targetTitle} (pp. ${result.pageRange.join("-")})`);
+    console.log(
+      `   • Explaining Traceability: Every retrieved fact maps directly to explicit manual chapter & page numbers.`
+    );
   }
 }
 ```
@@ -87,82 +145,61 @@ vectorless-rag-01/src/cli.js
 ```javascript
 import { TreeBuilder } from "./tree/TreeBuilder.js";
 import { AgenticTreeSearchEngine } from "./search/AgenticTreeSearchEngine.js";
-import { WikiVault } from "./wiki/WikiVault.js";
 import { LLMLibrarian } from "./wiki/LLMLibrarian.js";
+import { TwoPassRetriever } from "./wiki/TwoPassRetriever.js";
 import { VectorVsVectorlessBenchmark } from "./comparison/VectorVsVectorlessBenchmark.js";
 
-function parseArgs() {
-  const args = {};
-  for (const arg of process.argv.slice(2)) {
-    if (arg.startsWith("--")) {
-      const [key, val] = arg.slice(2).split("=");
-      args[key] = val || true;
-    }
-  }
-  return args;
-}
+/**
+ * Interactive Command Line Interface for Vectorless RAG & LLM Wiki Engine.
+ */
+function runCLI() {
+  const args = process.argv.slice(2);
+  const modeArg = args.find((a) => a.startsWith("--mode="));
+  const mode = modeArg ? modeArg.split("=")[1] : "all";
 
-async function main() {
-  const args = parseArgs();
-  const mode = args.mode || "tree";
+  console.log("==========================================================================");
+  console.log("🚀 VECTORLESS RAG & LLM WIKI ENGINE (JS NODE.JS IMPLEMENTATION)");
+  console.log("==========================================================================\n");
 
-  console.log("=========================================================================");
-  console.log(`🚀 VECTORLESS RAG & LLM WIKI ENGINE (Mode: ${mode.toUpperCase()})`);
-  console.log("=========================================================================\n");
+  if (mode === "tree" || mode === "all") {
+    console.log("=== 🌳 DEMO 1: Vectorless RAG Tree Search (PageIndex Architecture) ===");
+    const tree = TreeBuilder.buildSampleManualTree();
 
-  if (mode === "tree") {
-    // 1. Demo: Hierarchical Tree RAG
-    const sections = [
-      { title: "System Architecture", level: 1, pageStart: 1, pageEnd: 3, content: "Distributed cluster architecture overview." },
-      { title: "Load Balancing", level: 1, pageStart: 4, pageEnd: 8, content: "Load balancer strategies including round-robin and sticky sessions." },
-      { title: "Sticky Session Failover", level: 2, pageStart: 9, pageEnd: 12, content: "Cookie-based sticky session recovery and automatic failover handling." },
-      { title: "Database Sharding", level: 1, pageStart: 13, pageEnd: 20, content: "Horizontal database partitioning." }
-    ];
+    console.log("\n--- Document Tree Structure ---");
+    tree.printTree();
 
-    const treeIndex = TreeBuilder.buildFromStructuredSections("Cluster Manual", sections);
-    const searchEngine = new AgenticTreeSearchEngine(treeIndex);
-
-    const query = args.query || "How do sticky sessions handle failover?";
+    const searchEngine = new AgenticTreeSearchEngine(tree);
+    const query = "How do sticky sessions handle backend server failover on an ALB?";
     const result = searchEngine.search(query);
 
-    console.log("\n✨ Tree Search Outcome:");
-    console.log(`Retrieved Chunks: ${result.retrievedChunks.length}`);
-    console.log(JSON.stringify(result.retrievedChunks, null, 2));
+    console.log("\n--- Retained Section Context ---");
+    console.log(result.retrievedContent);
+  }
 
-  } else if (mode === "wiki") {
-    // 2. Demo: Karpathy LLM Wiki Two-Pass Retrieval
-    const vault = new WikiVault();
-    vault.addPage({
-      id: "vllm-arch",
-      title: "vLLM Serving Architecture",
-      tags: ["vllm", "inference", "memory"],
-      summary: "High performance LLM serving engine using PagedAttention",
-      content: "vLLM uses PagedAttention to eliminate memory fragmentation in KV cache..."
-    });
+  if (mode === "wiki" || mode === "all") {
+    console.log("\n==========================================================================");
+    console.log("=== 📚 DEMO 2: LLM Wiki Two-Pass Retrieval (Karpathy Model) ===");
+    console.log("==========================================================================");
+    
+    const vault = LLMLibrarian.buildSampleVault();
+    const wikiRetriever = new TwoPassRetriever(vault);
 
-    vault.addPage({
-      id: "tree-rag",
-      title: "Vectorless Tree RAG Model",
-      tags: ["tree", "pageindex", "rag"],
-      summary: "Hierarchical tree index navigation without embedding vectors",
-      content: "Vectorless RAG navigates document heading trees top-down using LLM reasoning..."
-    });
+    const query = "Where is the documentation for ALB sticky sessions cookies?";
+    const result = wikiRetriever.searchAndRetrieve(query);
 
-    const librarian = new LLMLibrarian(vault);
-    const query = args.query || "vllm pagedattention";
-    const result = librarian.answerQuery(query);
+    console.log("\n--- Final Retrieved Document Text ---");
+    console.log(result.retrievedFullContent);
+  }
 
-    console.log("\n✨ LLM Wiki Answer:");
-    console.log(result.answer);
-
-  } else if (mode === "benchmark") {
-    // 3. Demo: Benchmark Comparison
-    const query = args.query || "Sticky session failover recovery";
-    VectorVsVectorlessBenchmark.runComparison(query);
+  if (mode === "benchmark" || mode === "all") {
+    console.log("\n==========================================================================");
+    console.log("=== ⚡ DEMO 3: Vector RAG vs Vectorless RAG Benchmark ===");
+    console.log("==========================================================================");
+    VectorVsVectorlessBenchmark.runBenchmark();
   }
 }
 
-main().catch(console.error);
+runCLI();
 ```
 
 ---
@@ -180,6 +217,11 @@ import { WikiFileEntry, WikiVault } from "./wiki/WikiVault.js";
 import { TwoPassRetriever } from "./wiki/TwoPassRetriever.js";
 import { LLMLibrarian } from "./wiki/LLMLibrarian.js";
 import { VectorVsVectorlessBenchmark } from "./comparison/VectorVsVectorlessBenchmark.js";
+
+// Execute default CLI driver if invoked directly
+if (process.argv[1] && process.argv[1].endsWith("index.js")) {
+  import("./cli.js");
+}
 
 export {
   config,

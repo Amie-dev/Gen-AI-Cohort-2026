@@ -7,7 +7,7 @@ The goal of this chapter is to configure the foundation infrastructure for the *
 Before implementing multi-query engines, security guardrails, rank fusion, or API endpoints, we first build a stable local environment connecting:
 1. **Containerized Infrastructure**: Vector DB (**Qdrant**), Redis key-value store (**BullMQ** queue storage), and Relational DB (**PostgreSQL**).
 2. **ESM Project Configuration**: Native ES Module `package.json` with scripts for server startup and background worker execution.
-3. **Environment Parameters**: System ports, model parameters, and vector dimensions defined in `.env`.
+3. **Environment Parameters**: System ports, model parameters, and database parameters defined in `.env`.
 
 ### 🎯 Expected Outcome
 
@@ -28,43 +28,36 @@ adv-rag-1/
 Create [`docker-compose.yml`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/docker-compose.yml):
 
 ```yaml
+version: '3.8'
+
 services:
   qdrant:
     image: qdrant/qdrant:latest
-    container_name: adv-rag-1-qdrant
-    restart: unless-stopped
+    container_name: adv_rag_qdrant
     ports:
-      - "6333:6333" # REST API
-      - "6334:6334" # gRPC API
+      - "6333:6333"
+      - "6334:6334"
     volumes:
-      - qdrant_data:/qdrant/storage
+      - qdrant_storage:/qdrant/storage
 
   redis:
     image: redis:7-alpine
-    container_name: adv-rag-1-redis
-    restart: unless-stopped
+    container_name: adv_rag_redis
     ports:
       - "6379:6379"
-    volumes:
-      - redis_data:/data
 
   postgres:
     image: postgres:15-alpine
-    container_name: adv-rag-1-postgres
-    restart: unless-stopped
+    container_name: adv_rag_postgres
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgrespassword
-      POSTGRES_DB: adv_rag_db
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: app_db
     ports:
       - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
 
 volumes:
-  qdrant_data:
-  redis_data:
-  postgres_data:
+  qdrant_storage:
 ```
 
 ### Starting Infrastructure Containers
@@ -91,7 +84,7 @@ Create [`package.json`](file:///home/aminul/development/gen-ai-cohort/week03/lea
 {
   "name": "adv-rag-1",
   "version": "1.0.0",
-  "description": "Production-Grade Advanced RAG System with Guardrails, Query Translation, Multi-Source Routing, RRF, Re-ranking, CRAG, and BullMQ",
+  "description": "Production-Grade Advanced RAG System following Section 37 Folder Structure",
   "license": "ISC",
   "type": "module",
   "main": "src/server.js",
@@ -128,29 +121,34 @@ npm install
 Create [`.env.example`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag-1/.env.example) and copy to `.env`:
 
 ```env
-PORT=3000
-
-# Redis Config (BullMQ Backing Store)
-REDIS_HOST=127.0.0.1
-REDIS_PORT=6379
-
-# Qdrant Vector Database
-QDRANT_URL=http://127.0.0.1:6333
-QDRANT_COLLECTION=adv_rag_1_documents
-
-# OpenAI API Settings
+# OpenAI API Configuration
 OPENAI_API_KEY=your_openai_api_key_here
 OPENAI_MODEL=gpt-4o-mini
-EMBEDDING_MODEL=text-embedding-3-small
-EMBEDDING_DIMENSIONS=1536
 
-# Text Chunking Settings
-CHUNK_SIZE=1000
-CHUNK_OVERLAP=200
+# Server Port
+PORT=3000
 
-# Retrieval & Fusion Parameters
-RETRIEVAL_TOP_K=5
-RRF_K=60
+# Qdrant Vector DB Configuration
+QDRANT_URL=http://localhost:6333
+QDRANT_COLLECTION=production_rag_docs
+
+# Redis / BullMQ Configuration
+REDIS_HOST=localhost
+REDIS_PORT=6379
+
+# PostgreSQL Configuration
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432
+POSTGRES_DB=app_db
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=postgres
+
+# MongoDB Configuration
+MONGO_URI=mongodb://localhost:27017/app_docs
+
+# AWS S3 Configuration
+AWS_REGION=us-east-1
+S3_BUCKET_NAME=production-rag-assets
 ```
 
 ---

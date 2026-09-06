@@ -36,50 +36,73 @@ rag+memory/src/rag/DocumentStore.js
 ```javascript
 import { getEmbedding, cosineSimilarity } from "../utils/embeddings.js";
 
+/**
+ * DocumentStore.js
+ * In-Memory Vector & Keyword Document Collection for Knowledge Retrieval
+ */
 export class DocumentStore {
   constructor() {
-    this.documents = new Map();
+    this.chunks = []; // Array of { id, docId, title, content, vector, keywords }
   }
 
-  async addDocument(id, title, content, metadata = {}) {
-    const embedding = await getEmbedding(content);
-    this.documents.set(id, {
-      id,
-      title,
-      content,
-      metadata,
-      embedding,
-    });
-    return id;
-  }
+  /**
+   * Add raw text content to knowledge base, chunking and embedding it
+   */
+  async addDocument(docId, title, content, chunkSize = 200, overlap = 50) {
+    const words = content.split(/\s+/);
+    let start = 0;
+    let chunkIndex = 0;
 
-  async searchDense(queryVector, limit = 5) {
-    const results = [];
-    for (const doc of this.documents.values()) {
-      const sim = cosineSimilarity(queryVector, doc.embedding);
-      results.push({ ...doc, score: sim });
-    }
-    results.sort((a, b) => b.score - a.score);
-    return results.slice(0, limit);
-  }
+    while (start < words.length) {
+      const end = Math.min(start + chunkSize, words.length);
+      const chunkText = words.slice(start, end).join(" ");
+      const vector = await getEmbedding(chunkText);
+      const keywords = new Set(chunkText.toLowerCase().replace(/[^a-z0-9 ]/g, "").split(/\s+/));
 
-  async searchSparse(queryText, limit = 5) {
-    const terms = queryText.toLowerCase().split(/\s+/);
-    const results = [];
-
-    for (const doc of this.documents.values()) {
-      const text = `${doc.title} ${doc.content}`.toLowerCase();
-      let matchCount = 0;
-      terms.forEach((t) => {
-        if (text.includes(t)) matchCount++;
+      this.chunks.push({
+        id: `${docId}_chunk_${chunkIndex}`,
+        docId,
+        title,
+        content: chunkText,
+        vector,
+        keywords,
       });
-      if (matchCount > 0) {
-        results.push({ ...doc, score: matchCount / terms.length });
-      }
-    }
 
-    results.sort((a, b) => b.score - a.score);
-    return results.slice(0, limit);
+      chunkIndex++;
+      start += chunkSize - overlap;
+    }
+  }
+
+  /**
+   * Perform dense vector similarity search
+   */
+  async searchDense(vector, topK = 5) {
+    const scored = this.chunks.map((chunk) => {
+      const sim = cosineSimilarity(vector, chunk.vector);
+      return { ...chunk, score: sim, searchType: "dense" };
+    });
+
+    scored.sort((a, b) => b.score - a.score);
+    return scored.slice(0, topK);
+  }
+
+  /**
+   * Perform sparse keyword match search
+   */
+  async searchSparse(query, topK = 5) {
+    const queryTokens = query.toLowerCase().replace(/[^a-z0-9 ]/g, "").split(/\s+/);
+    
+    const scored = this.chunks.map((chunk) => {
+      let matches = 0;
+      queryTokens.forEach((token) => {
+        if (chunk.keywords.has(token)) matches++;
+      });
+      const score = matches / (queryTokens.length || 1);
+      return { ...chunk, score, searchType: "sparse" };
+    });
+
+    scored.sort((a, b) => b.score - a.score);
+    return scored.slice(0, topK);
   }
 }
 ```
@@ -103,27 +126,44 @@ rag+memory/src/rag/HybridRanker.js
 ### Code
 
 ```javascript
+/**
+ * HybridRanker.js
+ * Implements Reciprocal Rank Fusion (RRF) and Re-ranking over multiple search result streams.
+ */
 export class HybridRanker {
-  static fuseRRF(rankingStreams, k = 60, topK = 3) {
-    const rrfScores = new Map();
-    const docMap = new Map();
+  /**
+   * Reciprocal Rank Fusion (RRF)
+   * @param {Array<Array<Object>>} searchLists - Array of ranked document lists
+   * @param {number} rrfK - Rank constant (default 60)
+   * @param {number} finalTopK - Number of top documents to return
+   */
+  static fuseRRF(searchLists, rrfK = 60, finalTopK = 4) {
+    const scoresMap = new Map(); // chunkId -> { chunk, rrfScore }
 
-    for (const stream of rankingStreams) {
-      stream.forEach((doc, rankIndex) => {
-        docMap.set(doc.id, doc);
-        const currentScore = rrfScores.get(doc.id) || 0;
-        const rankScore = 1 / (k + (rankIndex + 1));
-        rrfScores.set(doc.id, currentScore + rankScore);
+    searchLists.forEach((docList) => {
+      docList.forEach((doc, rankIndex) => {
+        const rank = rankIndex + 1; // 1-based rank
+        const contribution = 1 / (rrfK + rank);
+
+        if (!scoresMap.has(doc.id)) {
+          scoresMap.set(doc.id, {
+            chunk: doc,
+            rrfScore: contribution,
+          });
+        } else {
+          const item = scoresMap.get(doc.id);
+          item.rrfScore += contribution;
+        }
       });
-    }
+    });
 
-    const fused = Array.from(rrfScores.entries()).map(([id, score]) => ({
-      ...docMap.get(id),
-      rrfScore: score,
-    }));
-
+    const fused = Array.from(scoresMap.values());
     fused.sort((a, b) => b.rrfScore - a.rrfScore);
-    return fused.slice(0, topK);
+
+    return fused.slice(0, finalTopK).map((item) => ({
+      ...item.chunk,
+      finalScore: item.rrfScore,
+    }));
   }
 }
 ```
@@ -143,38 +183,74 @@ rag+memory/src/rag/Guardrails.js
 ### Code
 
 ```javascript
+/**
+ * Guardrails.js — Security & Quality Pipeline
+ * Handles Input PII Masking, Prompt Injection Detection, and Output PII Unmasking.
+ */
+
 export class Guardrails {
   constructor() {
-    this.piiMap = new Map();
+    this.piiMap = new Map(); // token -> original value
+    this.tokenCounter = 0;
   }
 
-  processInput(query) {
-    let sanitized = query;
-    let maskedCount = 0;
-
-    // Mask Email
-    sanitized = sanitized.replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, (match) => {
-      const placeholder = `[MASKED_EMAIL_${++maskedCount}]`;
-      this.piiMap.set(placeholder, match);
-      return placeholder;
+  /**
+   * Sanitizes input text by masking sensitive PII (emails, phone numbers, API keys)
+   */
+  processInput(rawQuery) {
+    let sanitized = rawQuery;
+    
+    // 1. Email Masking
+    const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+    sanitized = sanitized.replace(emailRegex, (match) => {
+      this.tokenCounter++;
+      const token = `[PII_EMAIL_${this.tokenCounter}]`;
+      this.piiMap.set(token, match);
+      return token;
     });
 
-    // Mask API Keys
-    sanitized = sanitized.replace(/sk-[A-Za-z0-9_-]{20,}/g, (match) => {
-      const placeholder = `[MASKED_KEY_${++maskedCount}]`;
-      this.piiMap.set(placeholder, match);
-      return placeholder;
+    // 2. Phone Number Masking
+    const phoneRegex = /\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/g;
+    sanitized = sanitized.replace(phoneRegex, (match) => {
+      this.tokenCounter++;
+      const token = `[PII_PHONE_${this.tokenCounter}]`;
+      this.piiMap.set(token, match);
+      return token;
     });
 
-    return { sanitizedQuery: sanitized, maskedCount };
+    // 3. Secret / API Key Masking
+    const apiKeyRegex = /(sk-[a-zA-Z0-9]{20,}|AIzaSy[a-zA-Z0-9_-]{30,})/g;
+    sanitized = sanitized.replace(apiKeyRegex, (match) => {
+      this.tokenCounter++;
+      const token = `[PII_SECRET_${this.tokenCounter}]`;
+      this.piiMap.set(token, match);
+      return token;
+    });
+
+    // 4. Prompt Injection Safety Check
+    const injectionPatterns = [
+      /ignore previous instructions/i,
+      /system prompt override/i,
+      /jailbreak/i,
+    ];
+    const isSuspicious = injectionPatterns.some((pattern) => pattern.test(sanitized));
+
+    return {
+      sanitizedQuery: sanitized,
+      maskedCount: this.piiMap.size,
+      isSuspicious,
+    };
   }
 
-  processOutput(response) {
-    let restored = response;
-    for (const [placeholder, original] of this.piiMap.entries()) {
-      restored = restored.replaceAll(placeholder, original);
+  /**
+   * Restores original PII values into final response payload
+   */
+  processOutput(generatedResponse) {
+    let unmasked = generatedResponse;
+    for (const [token, original] of this.piiMap.entries()) {
+      unmasked = unmasked.replaceAll(token, original);
     }
-    return restored;
+    return unmasked;
   }
 }
 ```

@@ -31,8 +31,8 @@ To allow the RAG orchestrator to query all four storage engines uniformly, we bu
         │                  │                          │                  │
         ▼                  ▼                          ▼                  ▼
 ┌───────────────┐  ┌───────────────┐          ┌───────────────┐  ┌───────────────┐
-│  src/db/      │  │  src/db/      │          │  src/db/      │  │ AWS S3 SDK /  |
-|  qdrant.js    │  │  postgres.js  │          │  mongo.js     │  │ Mock Storage  │
+│  src/db/      │  │  src/db/      │          │  src/db/      │  │ AWS S3 SDK /  │
+│  qdrant.js    │  │  postgres.js  │          │  mongo.js     │  │ Mock Storage  │
 └───────────────┘  └───────────────┘          └───────────────┘  └───────────────┘
 ```
 
@@ -128,14 +128,14 @@ export async function queryMongo(collectionName, filter = {}) {
 Create [`src/db/redis.js`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag/src/db/redis.js):
 
 ```javascript
-import Redis from "ioredis";
 import { config } from "../config.js";
 
-export const redisConnection = new Redis({
+// Connection parameters required by BullMQ
+export const redisConnection = {
   host: config.redis.host,
   port: config.redis.port,
   maxRetriesPerRequest: null,
-});
+};
 ```
 
 ---
@@ -161,9 +161,11 @@ Create [`src/adapters/vectorAdapter.js`](file:///home/aminul/development/gen-ai-
 ```javascript
 import { vectorSearch } from "../retrieval/vectorSearch.js";
 
-export async function queryVectorAdapter(searchQuery, user) {
-  console.log(`🎯 [Vector Adapter] Querying Qdrant for: "${searchQuery}"`);
-  return await vectorSearch(searchQuery);
+/**
+ * Vector DB Adapter (Qdrant)
+ */
+export async function searchVector(query) {
+  return await vectorSearch(query);
 }
 ```
 
@@ -176,18 +178,23 @@ Create [`src/adapters/sqlAdapter.js`](file:///home/aminul/development/gen-ai-coh
 ```javascript
 import { queryPostgres } from "../db/postgres.js";
 
-export async function querySqlAdapter(searchQuery, user) {
-  console.log(`🛢️ [SQL Adapter] Executing Relational Query for user ${user?.id}...`);
-  const rows = await queryPostgres("SELECT * FROM users WHERE id = $1", [user?.id]);
-  
-  return rows.map((row) => ({
-    id: `sql_${row.id}`,
-    title: `Account Record (${row.name})`,
-    text: `User ${row.name} is on the ${row.plan} subscription. Account Status: ${row.billingStatus}, Monthly Fee: ${row.monthlyFee}, Last Invoice: ${row.lastInvoiceDate}. Refund Eligible: ${row.refundEligible}.`,
-    source: "PostgreSQL Database (Billing Table)",
-    score: 0.95,
-    metadata: { userId: row.id, tenantId: user?.tenantId || "default", accessLevel: 1 },
-  }));
+/**
+ * SQL DB Adapter
+ */
+export async function searchSQL(query, user = {}) {
+  const records = await queryPostgres(query);
+  const targetUser = records.find(r => r.id === user.id || r.id === "USER_123") || records[0];
+
+  return [
+    {
+      id: `sql_${targetUser.id}`,
+      title: `Relational User Account Record (${targetUser.id})`,
+      text: `User Account: ${targetUser.name} (${targetUser.id})\nPlan: ${targetUser.plan}\nBilling Status: ${targetUser.billingStatus}\nMonthly Fee: ${targetUser.monthlyFee}\nRefund Eligible: ${targetUser.refundEligible}`,
+      source: "PostgreSQL Database",
+      score: 0.98,
+      metadata: { tenantId: user.tenantId || "default", accessLevel: 1 }
+    }
+  ];
 }
 ```
 
@@ -200,17 +207,18 @@ Create [`src/adapters/mongoAdapter.js`](file:///home/aminul/development/gen-ai-c
 ```javascript
 import { queryMongo } from "../db/mongo.js";
 
-export async function queryMongoAdapter(searchQuery, user) {
-  console.log(`🍃 [Mongo Adapter] Fetching NoSQL logs for: "${searchQuery}"`);
-  const docs = await queryMongo("user_sessions", { userId: user?.id });
-
-  return docs.map((doc) => ({
-    id: `mongo_${doc.sessionId}`,
-    title: "Session Log Record",
-    text: `Session ${doc.sessionId} for user ${doc.userId} recorded last login at ${doc.lastLogin}. Preferences: ${JSON.stringify(doc.preferences)}.`,
-    source: "MongoDB (user_sessions)",
-    score: 0.85,
-    metadata: { tenantId: user?.tenantId || "default", accessLevel: 1 },
+/**
+ * MongoDB Adapter
+ */
+export async function searchMongo(query) {
+  const docs = await queryMongo("sessions", { query });
+  return docs.map(d => ({
+    id: `mongo_${d.sessionId}`,
+    title: "MongoDB User Session Log",
+    text: `Session ${d.sessionId} for ${d.userId} active at ${d.lastLogin}. Theme: ${d.preferences.theme}`,
+    source: "MongoDB Database",
+    score: 0.90,
+    metadata: { tenantId: "default", accessLevel: 1 }
   }));
 }
 ```
@@ -222,18 +230,19 @@ export async function queryMongoAdapter(searchQuery, user) {
 Create [`src/adapters/s3Adapter.js`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag/src/adapters/s3Adapter.js):
 
 ```javascript
-export async function queryS3Adapter(searchQuery, user) {
-  console.log(`📦 [S3 Adapter] Searching S3 Document Bucket for: "${searchQuery}"`);
-
+/**
+ * AWS S3 Object Storage Adapter
+ */
+export async function searchS3(query) {
   return [
     {
-      id: "s3_doc_99",
-      title: "S3 Document Object",
-      text: "Unstructured document retrieved directly from AWS S3 storage bucket.",
-      source: "AWS S3 Bucket (s3://company-docs/policy.pdf)",
-      score: 0.80,
-      metadata: { tenantId: user?.tenantId || "default", accessLevel: 1 },
-    },
+      id: "s3_invoice_2026_08.pdf",
+      title: "Subscription Invoice August 2026",
+      text: "PDF Invoice Document: Invoice #INV-2026-0881. Total Paid: $29.99. Download URL: https://s3.amazonaws.com/billing/INV-2026-0881.pdf",
+      source: "Amazon S3 Storage",
+      score: 0.95,
+      metadata: { tenantId: "default", accessLevel: 1 }
+    }
   ];
 }
 ```
@@ -245,12 +254,53 @@ export async function queryS3Adapter(searchQuery, user) {
 Create [`src/adapters/index.js`](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag/src/adapters/index.js):
 
 ```javascript
-import { queryVectorAdapter } from "./vectorAdapter.js";
-import { querySqlAdapter } from "./sqlAdapter.js";
-import { queryMongoAdapter } from "./mongoAdapter.js";
-import { queryS3Adapter } from "./s3Adapter.js";
+import { searchSQL } from "./sqlAdapter.js";
+import { searchVector } from "./vectorAdapter.js";
+import { searchMongo } from "./mongoAdapter.js";
+import { searchS3 } from "./s3Adapter.js";
 
-export async function executeAdapter(routeType, searchQuery, user) {
+/**
+ * Step 7: Adapter Execution Layer
+ * Executes queries against target data store(s) based on route.
+ */
+export async function executeAdapter(route, query, user = {}) {
+  const store = route?.targetStore || "VECTOR_DB";
+
+  switch (store) {
+    case "AUTH_DB":
+      return await searchSQL(query, user);
+
+    case "VECTOR_DB":
+      return await searchVector(query);
+
+    case "S3":
+      return await searchS3(query);
+
+    case "MULTI_STORE": {
+      const [sqlHits, vectorHits] = await Promise.all([
+        searchSQL(query, user),
+        searchVector(query),
+      ]);
+      return [...sqlHits, ...vectorHits];
+    }
+
+    default:
+      return await searchVector(query);
+  }
+}
+```
+
+---
+
+## 4. Summary & Next Steps
+
+In this chapter, we:
+- Initialized client abstractions for Qdrant, PostgreSQL, MongoDB, and Redis.
+- Built 4 uniform data source adapters (Vector, SQL, NoSQL, S3) that normalize engine output into standardized candidate document records.
+- Implemented `executeAdapter()` to dynamically route queries to target databases.
+
+In [**Chapter 02 — Guardrails & PII Protection**](file:///home/aminul/development/gen-ai-cohort/week03/learning/day05/code/adv-rag/implementation%20guide/chapter-02-guardrails-security.md), we will build the input safety guardrails, prompt injection detection, PII masking, and output verification pipeline.
+teType, searchQuery, user) {
   switch (routeType) {
     case "sql":
       return await querySqlAdapter(searchQuery, user);

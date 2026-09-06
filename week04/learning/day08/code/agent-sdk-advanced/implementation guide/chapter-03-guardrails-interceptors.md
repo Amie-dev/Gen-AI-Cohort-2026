@@ -92,25 +92,25 @@ export const securityGuardrail: IInputGuardrail = {
 // src/guardrails/cliSafetyGuardrail.ts
 import { GuardrailResult, IInputGuardrail } from "../types.js";
 
-const DANGEROUS_CLI_PATTERNS = [
-  /rm\s+-rf\s+[\/\~]/i,
-  /mkfs/i,
-  /dd\s+if=/i,
-  />\s*\/dev\/sd/i,
-  /:(){ :|:& };:/,
-  /shutdown/i,
-  /reboot/i,
-  /chmod\s+-R\s+777\s+\//i,
+const DANGEROUS_COMMAND_PATTERNS = [
+  /\brm\s+-[rf]{1,2}\b/i,
+  /\bsudo\b/i,
+  /\bmkfs\b/i,
+  /\bdd\b/i,
+  /\bchmod\s+777\b/i,
+  /\bshutdown\b/i,
+  /\breboot\b/i,
+  /:()\{\s*:\|:&\s*\};:/, // Fork bomb
 ];
 
 export const cliSafetyGuardrail: IInputGuardrail = {
   name: "CLISafetyGuardrail",
   validate(input: string, agentName: string): GuardrailResult {
-    for (const pattern of DANGEROUS_CLI_PATTERNS) {
+    for (const pattern of DANGEROUS_COMMAND_PATTERNS) {
       if (pattern.test(input)) {
         return {
           passed: false,
-          reason: `CLI Safety Guardrail triggered for agent '${agentName}': Destructive shell command pattern detected. Execution blocked.`,
+          reason: `CLI Safety Guardrail triggered for agent '${agentName}': Destructive shell command pattern detected in "${input}".`,
         };
       }
     }
@@ -125,17 +125,20 @@ export const cliSafetyGuardrail: IInputGuardrail = {
 // src/guardrails/topicGuardrail.ts
 import { GuardrailResult, IInputGuardrail } from "../types.js";
 
-export function createTopicGuardrail(topicName: string, requiredKeywords: string[]): IInputGuardrail {
+export function createTopicGuardrail(
+  topicName: string,
+  allowedKeywords: string[]
+): IInputGuardrail {
   return {
     name: `TopicGuardrail_${topicName}`,
     validate(input: string, agentName: string): GuardrailResult {
-      const lower = input.toLowerCase();
-      const hasKeyword = requiredKeywords.some((kw) => lower.includes(kw.toLowerCase()));
+      const lowerInput = input.toLowerCase();
+      const matches = allowedKeywords.some((kw) => lowerInput.includes(kw.toLowerCase()));
 
-      if (!hasKeyword) {
+      if (!matches) {
         return {
           passed: false,
-          reason: `Topic Guardrail triggered for agent '${agentName}': Query does not relate to required domain '${topicName}'.`,
+          reason: `Topic Guardrail triggered for agent '${agentName}': Input does not align with domain scope '${topicName}'. Allowed topics include: [${allowedKeywords.join(", ")}].`,
         };
       }
       return { passed: true };
@@ -186,6 +189,30 @@ export const piiRedactionGuardrail: IOutputGuardrail = {
 };
 ```
 
+### 2. Content Safety Guardrail (`contentSafetyGuardrail.ts`)
+
+```typescript
+// src/guardrails/contentSafetyGuardrail.ts
+import { GuardrailResult, IOutputGuardrail } from "../types.js";
+
+const HARMFUL_PATTERNS = [/top\s+secret\s+internal\s+data/i, /malicious\s+exploit/i];
+
+export const contentSafetyGuardrail: IOutputGuardrail = {
+  name: "OutputContentSafetyGuardrail",
+  validate(output: string, agentName: string): GuardrailResult {
+    for (const pattern of HARMFUL_PATTERNS) {
+      if (pattern.test(output)) {
+        return {
+          passed: false,
+          reason: `Content Safety Guardrail triggered for agent '${agentName}': Generated response violated safety standards.`,
+        };
+      }
+    }
+    return { passed: true };
+  },
+};
+```
+
 ---
 
 ## 5. Implementing Logging Interceptor
@@ -195,21 +222,22 @@ export const piiRedactionGuardrail: IOutputGuardrail = {
 import { IMessage, Interceptor } from "../types.js";
 
 export const consoleLoggerInterceptor: Interceptor = (message: IMessage, agentName?: string) => {
-  const prefix = agentName ? `[AGENT: ${agentName}]` : "[AGENT]";
+  const prefix = agentName ? `[Agent: ${agentName}]` : "[Agent SDK]";
   const time = new Date().toLocaleTimeString();
 
   switch (message.role) {
     case "user":
-      console.log(`\x1b[36m${time} ${prefix} 👤 User Query:\x1b[0m ${message.content}`);
+      console.log(`\x1b[36m${prefix} [${time}] 👤 USER: ${message.content}\x1b[0m`);
       break;
     case "assistant":
-      console.log(`\x1b[32m${time} ${prefix} 🤖 Assistant Turn:\x1b[0m ${message.content}`);
+      console.log(`\x1b[32m${prefix} [${time}] 🤖 ASSISTANT: ${message.content}\x1b[0m`);
       break;
     case "developer":
-      console.log(`\x1b[33m${time} ${prefix} ⚙️ Developer / Tool Output:\x1b[0m ${message.content}`);
+      console.log(`\x1b[33m${prefix} [${time}] ⚙️ TOOL/DEV: ${message.content}\x1b[0m`);
       break;
-    default:
-      console.log(`${time} ${prefix} ${message.role}: ${message.content}`);
+    case "system":
+      console.log(`\x1b[35m${prefix} [${time}] 📋 SYSTEM: ${message.content}\x1b[0m`);
+      break;
   }
 };
 ```

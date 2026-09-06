@@ -26,41 +26,72 @@ LLM Completion -> [PII Redaction & Output Guardrail] -> Masked Safe Output
 
 ## 2. Input Guardrails Subsystem
 
-### 1. Schema & Length Validation (`src/guardrails/input.js`)
+## 2. Input Guardrails Subsystem
+
+### 1. Master Input Guardrails Processor (`src/guardrails/input.js`)
 
 ```javascript
-export function validateInput(query) {
-  if (!query || typeof query !== 'string') {
-    return { valid: false, reason: 'Query must be a non-empty string.' };
+import { PIIMasker } from "./pii.js";
+import { PromptInjectionDetector } from "./injection.js";
+
+/**
+ * Input Guardrails Master Processor
+ * Performs PII Masking, Prompt Injection Detection, and Auth/ACL Verification.
+ */
+export class InputGuardrails {
+  constructor() {
+    this.piiMasker = new PIIMasker();
   }
-  const trimmed = query.trim();
-  if (trimmed.length < 2) {
-    return { valid: false, reason: 'Query is too short.' };
+
+  process(rawQuery, userContext = {}) {
+    // 1. Authorization check
+    if (!userContext.userId) {
+      throw new Error("Unauthorized: Missing userId context.");
+    }
+
+    // 2. Prompt Injection check
+    const injectionCheck = PromptInjectionDetector.checkInjection(rawQuery);
+    if (injectionCheck.isMalicious) {
+      throw new Error(`Security Violation: Malicious prompt injection pattern detected (${injectionCheck.matchedPattern}).`);
+    }
+
+    // 3. PII Masking
+    const { sanitizedText, maskedCount, tokenMap } = this.piiMasker.maskInput(rawQuery);
+
+    return {
+      cleanQuery: sanitizedText,
+      maskedCount,
+      tokenMap,
+      isValid: true,
+    };
   }
-  if (trimmed.length > 2000) {
-    return { valid: false, reason: 'Query exceeds maximum length of 2000 characters.' };
-  }
-  return { valid: true, cleanQuery: trimmed };
 }
 ```
 
 ### 2. Prompt Injection Protection (`src/guardrails/injection.js`)
 
 ```javascript
-const INJECTION_PATTERNS = [
-  /ignore\s+(all\s+)?previous\s+instructions/i,
-  /bypass\s+guardrails/i,
-  /system\s+prompt\s+override/i,
-  /you\s+are\s+now\s+DAN/i,
-];
+/**
+ * Prompt Injection & Jailbreak Detection Module
+ */
+export class PromptInjectionDetector {
+  static checkInjection(text) {
+    const suspiciousPatterns = [
+      /ignore all previous instructions/i,
+      /disregard system prompt/i,
+      /you are now DAN/i,
+      /bypass security rules/i,
+      /reveal system prompt/i
+    ];
 
-export function checkInjection(query) {
-  for (const pattern of INJECTION_PATTERNS) {
-    if (pattern.test(query)) {
-      return { detected: true, pattern: pattern.toString() };
+    for (const pattern of suspiciousPatterns) {
+      if (pattern.test(text)) {
+        return { isMalicious: true, matchedPattern: pattern.toString() };
+      }
     }
+
+    return { isMalicious: false };
   }
-  return { detected: false };
 }
 ```
 
@@ -73,37 +104,82 @@ export function checkInjection(query) {
 Redacts sensitive user data before returning responses:
 
 ```javascript
-export function redactPII(text) {
-  if (!text) return text;
-  let sanitized = text;
+/**
+ * PII Masking Engine
+ * Replaces sensitive identifiers (emails, phones, API keys) with tokenized placeholders.
+ */
+export class PIIMasker {
+  constructor() {
+    this.tokenMap = new Map();
+    this.counter = 0;
+  }
 
-  // Mask API Keys (sk-...)
-  sanitized = sanitized.replace(/sk-[A-Za-z0-9_-]{20,}/g, '[REDACTED_API_KEY]');
+  maskInput(text) {
+    let sanitized = text;
 
-  // Mask Social Security Numbers (SSN)
-  sanitized = sanitized.replace(/\b\d{3}-\d{2}-\d{4}\b/g, '[REDACTED_SSN]');
+    // Emails
+    sanitized = sanitized.replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, (match) => {
+      this.counter++;
+      const token = `[PII_EMAIL_${this.counter}]`;
+      this.tokenMap.set(token, match);
+      return token;
+    });
 
-  // Mask Email Addresses
-  sanitized = sanitized.replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, '[REDACTED_EMAIL]');
+    // Phone numbers
+    sanitized = sanitized.replace(/\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/g, (match) => {
+      this.counter++;
+      const token = `[PII_PHONE_${this.counter}]`;
+      this.tokenMap.set(token, match);
+      return token;
+    });
 
-  // Mask Credit Cards
-  sanitized = sanitized.replace(/\b\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}\b/g, '[REDACTED_CARD]');
+    // Secrets / API keys
+    sanitized = sanitized.replace(/(sk-[a-zA-Z0-9]{20,}|AIzaSy[a-zA-Z0-9_-]{30,})/g, (match) => {
+      this.counter++;
+      const token = `[PII_KEY_${this.counter}]`;
+      this.tokenMap.set(token, match);
+      return token;
+    });
 
-  return sanitized;
+    return { sanitizedText: sanitized, maskedCount: this.tokenMap.size, tokenMap: this.tokenMap };
+  }
+
+  unmaskOutput(text, tokenMap) {
+    let restored = text;
+    const mapToUse = tokenMap || this.tokenMap;
+    for (const [token, original] of mapToUse.entries()) {
+      restored = restored.replaceAll(token, original);
+    }
+    return restored;
+  }
 }
 ```
 
 ### 2. Output Quality Verification (`src/guardrails/output.js`)
 
 ```javascript
-export function validateOutput(output) {
-  if (!output || typeof output !== 'string') {
-    return { valid: false, reason: 'Output is empty or non-string.' };
+import { PIIMasker } from "./pii.js";
+
+/**
+ * Output Guardrails Processor
+ * Unmasks PII tokens back to original values and validates safety.
+ */
+export class OutputGuardrails {
+  constructor() {
+    this.piiMasker = new PIIMasker();
   }
-  if (output.trim().length === 0) {
-    return { valid: false, reason: 'Output contains only whitespace.' };
+
+  process(generatedText, tokenMap) {
+    // 1. Unmask PII Tokens
+    const restoredText = this.piiMasker.unmaskOutput(generatedText, tokenMap);
+
+    // 2. Output safety / length validation
+    if (!restoredText || restoredText.length === 0) {
+      return "Empty response produced.";
+    }
+
+    return restoredText;
   }
-  return { valid: true };
 }
 ```
 
@@ -116,27 +192,75 @@ export function validateOutput(output) {
 Maintains the recent turn history window for context assembly:
 
 ```javascript
-const userSTMCache = new Map();
+import { config } from "../config.js";
 
-export async function getShortTermMemory(userId, limit = 5) {
-  const history = userSTMCache.get(userId) || [];
-  return history.slice(-limit);
+/**
+ * ShortTermMemory Store
+ * Manages active session sliding window history for immediate conversational continuity.
+ */
+export class ShortTermMemory {
+  constructor(maxTurns = config.memory.stmMaxTurns) {
+    this.maxTurns = maxTurns;
+    this.sessions = new Map(); // sessionId -> Array of { role, content, timestamp }
+  }
+
+  async addTurn(sessionId, role, content) {
+    if (!this.sessions.has(sessionId)) {
+      this.sessions.set(sessionId, []);
+    }
+    const history = this.sessions.get(sessionId);
+    history.push({
+      role,
+      content,
+      timestamp: new Date().toISOString(),
+    });
+
+    if (history.length > this.maxTurns) {
+      this.sessions.set(sessionId, history.slice(-this.maxTurns));
+    }
+  }
+
+  async getRecentContext(sessionId, limit = null) {
+    const fetchLimit = limit || this.maxTurns;
+    const history = this.sessions.get(sessionId) || [];
+    return history.slice(-fetchLimit);
+  }
 }
 
-export async function addShortTermTurn(userId, role, content) {
-  const history = userSTMCache.get(userId) || [];
-  history.push({ role, content, timestamp: Date.now() });
-  userSTMCache.set(userId, history);
-}
+export const stmStore = new ShortTermMemory();
 ```
 
 ### 2. Persistent Conversation Store (`src/chat/conversationStore.js`)
 
 ```javascript
-export async function logConversationTurn(userId, query, response) {
-  console.log(`[ConversationStore] Saved turn for user ${userId}`);
-  return { id: `log_${Date.now()}`, userId, query, response };
+/**
+ * ConversationStore
+ * Stores raw, immutable conversation logs for analytics, debugging, and offline worker memory processing.
+ */
+export class ConversationStore {
+  constructor() {
+    this.logs = []; // Array of { id, userId, sessionId, userQuery, assistantResponse, timestamp }
+  }
+
+  async logInteraction(userId, sessionId, userQuery, assistantResponse) {
+    const record = {
+      id: `log_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      userId,
+      sessionId,
+      userQuery,
+      assistantResponse,
+      timestamp: new Date().toISOString(),
+    };
+    this.logs.push(record);
+    return record;
+  }
+
+  async getLogsForUser(userId) {
+    return this.logs.filter((l) => l.userId === userId);
+  }
 }
+
+export const conversationStore = new ConversationStore();
 ```
 
 ---

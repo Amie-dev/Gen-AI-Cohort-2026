@@ -35,54 +35,92 @@ vectorless-rag-01/src/wiki/TwoPassRetriever.js
 
 ### Code
 
+## 2. Implementing `TwoPassRetriever` (`src/wiki/TwoPassRetriever.js`)
+
+### File Path
+
+```text
+vectorless-rag-01/src/wiki/TwoPassRetriever.js
+```
+
+### Code
+
 ```javascript
+/**
+ * TwoPassRetriever implements Andrej Karpathy's Two-Pass Retrieval Algorithm for LLM Wikis.
+ */
 export class TwoPassRetriever {
+  /**
+   * @param {import('./WikiVault.js').WikiVault} wikiVault 
+   */
   constructor(wikiVault) {
     this.vault = wikiVault;
   }
 
-  retrieveRelevantContext(query) {
-    console.log(`\n📚 [Two-Pass Retrieval] Query: "${query}"`);
+  /**
+   * Executes Two-Pass scanning search algorithm.
+   * @param {string} query 
+   * @returns {Object}
+   */
+  searchAndRetrieve(query) {
+    console.log(`\n🔍 [LLM Wiki User Query]: "${query}"`);
 
-    // PASS 1: Light Metadata Catalog Search
-    const allHeaders = this.vault.getAllPageHeaders();
-    console.log(`   ├─ Pass 1 (Catalog Search): Scanning ${allHeaders.length} page header(s)...`);
-
+    // -----------------------------------------------------------------
+    // PASS 1: Lightweight Catalog Metadata & Summary Scan (0% Raw Text Loaded)
+    // -----------------------------------------------------------------
+    console.log(
+      `\n⚡ [PASS 1]: Scanning File Titles, Metadata Tags & Summaries across Catalog...`
+    );
+    const catalog = this.vault.listCatalogMetadata();
     const queryTerms = query.toLowerCase().split(/\s+/).filter((t) => t.length > 2);
-    const matchedHeaders = [];
 
-    for (const header of allHeaders) {
-      const headerText = `${header.title} ${header.summary} ${header.tags.join(" ")}`.toLowerCase();
-      let matchScore = 0;
+    const candidateFiles = [];
+
+    for (const meta of catalog) {
+      const metaText = `${meta.title} ${meta.summary} ${meta.tags.join(" ")}`.toLowerCase();
+      let score = 0;
+
       for (const term of queryTerms) {
-        if (headerText.includes(term)) {
-          matchScore++;
+        if (metaText.includes(term)) {
+          score += 2.0;
         }
       }
-      if (matchScore > 0) {
-        matchedHeaders.push({ ...header, matchScore });
+
+      console.log(
+        `   • Inspected Catalog Metadata for '${meta.filePath}' -> Keyword Match Score: ${score.toFixed(1)}`
+      );
+
+      if (score > 0) {
+        candidateFiles.push({ filePath: meta.filePath, title: meta.title, score });
       }
     }
 
-    matchedHeaders.sort((a, b) => b.matchScore - a.matchScore);
-    console.log(`   │  └─ Pass 1 Match: Identified ${matchedHeaders.length} relevant wiki page(s).`);
+    candidateFiles.sort((a, b) => b.score - a.score);
 
-    // PASS 2: Deep Article Content Fetch
-    console.log(`   └─ Pass 2 (Deep Content Fetch): Reading selected article contents...`);
-    const fullArticles = [];
-
-    for (const header of matchedHeaders) {
-      const fullPage = this.vault.getPage(header.id);
-      if (fullPage) {
-        fullArticles.push(fullPage);
-        console.log(`      - Loaded Article: "${fullPage.title}" (${fullPage.content.length} bytes)`);
-      }
+    if (candidateFiles.length === 0) {
+      console.log(`❌ No relevant wiki files located during Pass 1 catalog scan.`);
+      return { error: "No matching wiki documents found." };
     }
+
+    const selectedFile = candidateFiles[0];
+    console.log(
+      `🎯 [PASS 1 RESULT]: Selected Target File -> '${selectedFile.filePath}' (${selectedFile.title})`
+    );
+
+    // -----------------------------------------------------------------
+    // PASS 2: Selective Full Content Loading
+    // -----------------------------------------------------------------
+    console.log(
+      `\n📖 [PASS 2]: Lazy-loading raw content ONLY for selected file '${selectedFile.filePath}'...`
+    );
+    const rawContent = this.vault.readFileContent(selectedFile.filePath);
 
     return {
       query,
-      pass1HeadersCount: matchedHeaders.length,
-      retrievedArticles: fullArticles
+      selectedFile: selectedFile.filePath,
+      selectedTitle: selectedFile.title,
+      pass1Candidates: candidateFiles.map((c) => c.filePath),
+      retrievedFullContent: rawContent
     };
   }
 }
@@ -101,42 +139,64 @@ vectorless-rag-01/src/wiki/LLMLibrarian.js
 ### Code
 
 ```javascript
-import { TwoPassRetriever } from "./TwoPassRetriever.js";
+import { WikiFileEntry, WikiVault } from "./WikiVault.js";
 
+/**
+ * LLMLibrarian represents the background LLM agent organizing human-readable Markdown wiki vaults.
+ */
 export class LLMLibrarian {
-  constructor(wikiVault) {
-    this.vault = wikiVault;
-    this.retriever = new TwoPassRetriever(wikiVault);
-  }
+  /**
+   * Initializes a sample production Wiki Vault with catalog entries.
+   * @returns {WikiVault}
+   */
+  static buildSampleVault() {
+    const vault = new WikiVault();
 
-  answerQuery(query) {
-    console.log(`=================================================================`);
-    console.log(`📖 [LLM Librarian] Processing Request: "${query}"`);
-    console.log(`=================================================================`);
+    vault.addFile(
+      new WikiFileEntry({
+        filePath: "vault/infrastructure/cdn-setup.md",
+        title: "CDN Edge Caching & Distribution Guide",
+        category: "infrastructure",
+        tags: ["cdn", "cache", "edge", "cloudflare", "assets"],
+        summary: "Configuring Cloudflare CDN edge rules, TTL headers, and static asset distribution.",
+        rawContent: `# CDN Edge Caching Guide
+Static asset distribution relies on Cloudflare CDN edge workers. Cache control headers 
+set TTL to 86400 seconds (24 hours). Asset purge requests are dispatched asynchronously.`
+      })
+    );
 
-    const retrievalResult = this.retriever.retrieveRelevantContext(query);
+    vault.addFile(
+      new WikiFileEntry({
+        filePath: "vault/infrastructure/alb-sticky-sessions.md",
+        title: "Application Load Balancer (ALB) Sticky Sessions & Cookies",
+        category: "infrastructure",
+        tags: ["alb", "load-balancer", "sticky-sessions", "cookies", "aws"],
+        summary: "Explains AWS ALB sticky sessions, cookie expiration, encrypted session cookies, and sticky routing failover behavior.",
+        rawContent: `# ALB Sticky Sessions Architecture Guide
 
-    if (retrievalResult.retrievedArticles.length === 0) {
-      return {
-        query,
-        answer: `I could not find any relevant wiki articles matching "${query}" in the vault.`,
-        sources: []
-      };
-    }
+When sticky sessions are enabled on the AWS Application Load Balancer (ALB), 
+the load balancer binds a user's session state to a specific backend EC2 target instance.
 
-    let wikiContextPayload = `=== WIKI VAULT CONTEXT ===\n\n`;
-    retrievalResult.retrievedArticles.forEach((article, idx) => {
-      wikiContextPayload += `--- Article ${idx + 1}: ${article.title} (Tags: ${article.tags.join(", ")}) ---\n`;
-      wikiContextPayload += `${article.content}\n\n`;
-    });
+Key Cookie: AWSALB (Encrypted, 7-day default lifespan)
+Failover Behavior: If sticky target instance drops out of target group due to 3 failed health checks, 
+the ALB assigns a new sticky node and updates the browser cookie. Session state is re-hydrated from Redis.`
+      })
+    );
 
-    const answer = `Based on the LLM Wiki Vault articles (${retrievalResult.retrievedArticles.map((a) => a.title).join(", ")}), here is the answer to your query:\n\n${wikiContextPayload.slice(0, 300)}...`;
+    vault.addFile(
+      new WikiFileEntry({
+        filePath: "vault/databases/postgres-replication.md",
+        title: "PostgreSQL Primary-Replica Streaming Replication Mechanics",
+        category: "databases",
+        tags: ["postgres", "database", "replication", "failover", "wal"],
+        summary: "Primary-replica streaming replication, WAL log shipping, and automatic Patroni failover orchestration.",
+        rawContent: `# PostgreSQL Replication Guide
+PostgreSQL replication uses WAL streaming over TCP port 5432. Standby nodes apply write-ahead logs in real time. 
+Automatic failover is managed by Patroni using etcd distributed consensus.`
+      })
+    );
 
-    return {
-      query,
-      answer,
-      sources: retrievalResult.retrievedArticles.map((a) => a.title)
-    };
+    return vault;
   }
 }
 ```

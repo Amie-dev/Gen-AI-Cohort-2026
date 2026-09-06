@@ -195,14 +195,14 @@ Verify instantiation and knowledge base seeding:
 node -e "
 import { RAGMemoryAgent } from './src/agent/RAGMemoryAgent.js';
 const agent = new RAGMemoryAgent();
-agent.seedKnowledgeBase().then(() => console.log('Seeded Docs Count:', agent.docStore.documents.size));
+agent.seedKnowledgeBase().then(() => console.log('Seeded Chunks Count:', agent.docStore.chunks.length));
 "
 ```
 
 ### Expected Output
 
 ```text
-Seeded Docs Count: 3
+Seeded Chunks Count: 3
 ```
 
 Move to **Chapter 6** to execute the Interactive CLI Demonstration Suite.

@@ -39,46 +39,66 @@ vectorless-rag-01/src/search/SummaryPruner.js
 
 ### Code
 
+## 2. Implementing `SummaryPruner` (`src/search/SummaryPruner.js`)
+
+Evaluates node summary relevancy against the query string using keyword and semantic match scoring:
+
+### File Path
+
+```text
+vectorless-rag-01/src/search/SummaryPruner.js
+```
+
+### Code
+
 ```javascript
 import { config } from "../config.js";
 
+/**
+ * SummaryPruner evaluates high-level node summaries against user query intent to prune irrelevant branches.
+ */
 export class SummaryPruner {
-  static evaluateRelevance(query, node) {
-    const queryTerms = query.toLowerCase().split(/\s+/).filter((t) => t.length > 2);
-    const nodeText = `${node.title} ${node.summary}`.toLowerCase();
+  /**
+   * Scores a candidate tree node summary against user query keywords.
+   * @param {string} query 
+   * @param {import('../tree/TreeNode.js').TreeNode} node 
+   * @returns {number} Semantic relevance score
+   */
+  static calculateRelevanceScore(query, node) {
+    const normalizedQuery = query.toLowerCase();
+    const queryTerms = normalizedQuery.split(/\s+/).filter((t) => t.length > 2);
+    const nodeText = `${node.title} ${node.summary} ${node.keywords.join(" ")} ${node.entities.join(" ")}`.toLowerCase();
 
     let score = 0;
+
     for (const term of queryTerms) {
       if (nodeText.includes(term)) {
-        score += 1.0;
+        score += 2.0;
       }
     }
 
-    // Boost score if title matches keywords directly
+    // Direct title match boost
     for (const term of queryTerms) {
       if (node.title.toLowerCase().includes(term)) {
-        score += 1.5;
+        score += 3.0;
       }
     }
 
     return score;
   }
 
-  static pruneBranches(query, nodes, threshold = config.pruningThreshold) {
-    const scoredNodes = nodes.map((node) => ({
-      node,
-      score: SummaryPruner.evaluateRelevance(query, node)
-    }));
-
-    scoredNodes.sort((a, b) => b.score - a.score);
-
-    // Keep nodes meeting threshold, or at least the top candidate if any score > 0
-    const relevant = scoredNodes.filter((sn) => sn.score >= threshold);
-    if (relevant.length === 0 && scoredNodes.length > 0 && scoredNodes[0].score > 0) {
-      return [scoredNodes[0].node];
-    }
-
-    return relevant.map((sn) => sn.node);
+  /**
+   * Filters out candidate nodes falling below threshold score.
+   * @param {string} query 
+   * @param {import('../tree/TreeNode.js').TreeNode[]} candidateNodes 
+   * @param {number} [threshold=config.pruningThreshold]
+   * @returns {import('../tree/TreeNode.js').TreeNode[]}
+   */
+  static pruneNodes(query, candidateNodes, threshold = config.pruningThreshold) {
+    return candidateNodes.filter((node) => {
+      const score = SummaryPruner.calculateRelevanceScore(query, node);
+      return score >= threshold;
+    });
   }
 }
 ```
@@ -98,70 +118,100 @@ vectorless-rag-01/src/search/AgenticTreeSearchEngine.js
 ```javascript
 import { SummaryPruner } from "./SummaryPruner.js";
 
+/**
+ * AgenticTreeSearchEngine executes Top-Down LLM-style decision tree search traversal.
+ * Inspired by AlphaGo Monte Carlo Tree Search (MCTS) & PageIndex Architecture.
+ */
 export class AgenticTreeSearchEngine {
+  /**
+   * @param {import('../tree/HierarchicalTreeIndex.js').HierarchicalTreeIndex} treeIndex 
+   */
   constructor(treeIndex) {
-    this.index = treeIndex;
+    this.treeIndex = treeIndex;
   }
 
-  search(query, maxDepth = 3) {
-    console.log(`\n🔍 [Agentic Tree Search] Query: "${query}"`);
-    const logs = [];
-    const matchedLeaves = [];
+  /**
+   * Evaluates sibling nodes under a parent node to choose the single best branch.
+   * @param {string} query 
+   * @param {import('../tree/TreeNode.js').TreeNode[]} candidateNodes 
+   * @returns {import('../tree/TreeNode.js').TreeNode}
+   */
+  selectBestBranch(query, candidateNodes) {
+    let bestNode = candidateNodes[0];
+    let maxScore = -1;
 
-    if (!this.index || !this.index.root) {
-      return { matchedLeaves, logs, error: "Empty or invalid tree index." };
+    for (const node of candidateNodes) {
+      const score = SummaryPruner.calculateRelevanceScore(query, node);
+      if (score > maxScore) {
+        maxScore = score;
+        bestNode = node;
+      }
     }
 
-    let currentCandidates = [this.index.root];
-    let depth = 0;
+    return bestNode;
+  }
 
-    while (currentCandidates.length > 0 && depth < maxDepth) {
-      depth++;
-      console.log(`   ├─ Level ${depth}: Evaluating ${currentCandidates.length} candidate node(s)...`);
+  /**
+   * Executes top-down agentic tree search from root to leaf node.
+   * @param {string} query 
+   * @returns {Object} Structured retrieval response
+   */
+  search(query) {
+    let currentNode = this.treeIndex.root;
+    const traversalPath = [currentNode.nodeId];
+    const reasoningLogs = [];
 
-      const nextLevelCandidates = [];
+    console.log(`\n🔍 [Agentic Tree Search Query]: "${query}"`);
+    console.log(
+      `🚀 Starting Tree Traversal at Root: [${currentNode.nodeId}] ${currentNode.title}`
+    );
 
-      for (const candidate of currentCandidates) {
-        logs.push({
-          depth,
-          nodeId: candidate.id,
-          title: candidate.title,
-          action: "evaluating"
-        });
+    // Top-down branch evaluation
+    while (currentNode.children.length > 0) {
+      console.log(
+        `\n📂 Evaluating ${currentNode.children.length} child branches under "${currentNode.title}":`
+      );
 
-        if (candidate.isLeaf()) {
-          matchedLeaves.push(candidate);
-          console.log(`   │  └─ 🎯 Found Leaf Match: "${candidate.title}" (Pages ${candidate.pageStart}-${candidate.pageEnd})`);
-        } else {
-          // Prune children of current container node
-          const prunedChildren = SummaryPruner.pruneBranches(query, candidate.children);
-          console.log(`   │  └─ Node "${candidate.title}": Pruned ${candidate.children.length - prunedChildren.length}/${candidate.children.length} sub-branches.`);
-
-          for (const child of prunedChildren) {
-            nextLevelCandidates.push(child);
-          }
-        }
+      for (const child of currentNode.children) {
+        const score = SummaryPruner.calculateRelevanceScore(query, child);
+        console.log(
+          `   • [${child.nodeId}] ${child.title} (Score: ${score.toFixed(1)}) -> Summary: ${child.summary.substring(0, 80)}...`
+        );
       }
 
-      currentCandidates = nextLevelCandidates;
+      // Filter branches via SummaryPruner
+      const viableBranches = SummaryPruner.pruneNodes(query, currentNode.children);
+      const selectedChild =
+        viableBranches.length > 0
+          ? this.selectBestBranch(query, viableBranches)
+          : this.selectBestBranch(query, currentNode.children);
+
+      const logMsg = `LLM Agent selected branch [${selectedChild.nodeId}] (${selectedChild.title}) over ${currentNode.children.length - 1} siblings.`;
+      reasoningLogs.push(logMsg);
+
+      console.log(
+        `🎯 [LLM Agent Selected Branch]: [${selectedChild.nodeId}] ${selectedChild.title}`
+      );
+
+      currentNode = selectedChild;
+      traversalPath.push(currentNode.nodeId);
     }
 
-    // Collect content chunks from matched leaves
-    const retrievedChunks = [];
-    for (const leaf of matchedLeaves) {
-      retrievedChunks.push({
-        title: leaf.title,
-        pageStart: leaf.pageStart,
-        pageEnd: leaf.pageEnd,
-        chunks: leaf.chunks
-      });
-    }
+    console.log(
+      `\n✅ [Target Leaf Node Located]: [${currentNode.nodeId}] ${currentNode.title}`
+    );
+    console.log(`📍 Explicit Lineage Path: ${traversalPath.join(" -> ")}`);
+    console.log(`📖 Page Range: pp. ${currentNode.pageRange.join("-")}`);
 
     return {
       query,
-      matchedLeavesCount: matchedLeaves.length,
-      retrievedChunks,
-      trajectoryLogs: logs
+      documentTitle: this.treeIndex.documentTitle,
+      targetNodeId: currentNode.nodeId,
+      targetTitle: currentNode.title,
+      pageRange: currentNode.pageRange,
+      traversalPath,
+      reasoningLogs,
+      retrievedContent: currentNode.content
     };
   }
 }
