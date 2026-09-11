@@ -1,0 +1,33 @@
+{
+  "name": "day12-neo4j-cypher-graphrag",
+  "version": "1.0.0",
+  "description": "Week 06 Day 12 - Graph Databases, Cypher Query Language, Neo4j Node.js Integration, Cognitive Memory Architecture, and GraphRAG",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node index.js",
+    "seed": "node -e \"require('./src/db/seed').seedDatabase().then(() => process.exit(0)).catch(e => { console.error(e); process.exit(1); })\"",
+    "demo:all": "node index.js --all",
+    "demo:cypher": "node -e \"require('./src/demos/demo-02-cypher-crud').runCypherCrudDemo().then(() => process.exit(0))\"",
+    "demo:traversals": "node -e \"require('./src/demos/demo-03-traversals').runTraversalDemo().then(() => process.exit(0))\"",
+    "demo:memory": "node -e \"require('./src/demos/demo-04-agent-memory').runAgentMemoryDemo().then(() => process.exit(0))\"",
+    "demo:graphrag": "node -e \"require('./src/demos/demo-05-graphrag').runGraphRagDemo().then(() => process.exit(0))\"",
+    "demo:profiling": "node -e \"require('./src/demos/demo-06-profiling').runProfilingDemo().then(() => process.exit(0))\"",
+    "test": "node index.js --test"
+  },
+  "keywords": [
+    "neo4j",
+    "graph-database",
+    "cypher",
+    "graphrag",
+    "ai-agent-memory",
+    "nodejs"
+  ],
+  "author": "Gen AI Cohort",
+  "license": "MIT",
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "neo4j-driver": "^5.26.0"
+  },
+  "devDependencies": {}
+}
