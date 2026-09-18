@@ -1,0 +1,19 @@
+{
+  "name": "mcp-learning-code",
+  "version": "1.0.0",
+  "description": "Day 15 MCP Learning Code Examples - STDIO, HTTP/SSE, and Gateway",
+  "type": "module",
+  "main": "01-stdio-mcp-server/server.mjs",
+  "scripts": {
+    "start:stdio-server": "node 01-stdio-mcp-server/server.mjs",
+    "test:stdio": "node 01-stdio-mcp-server/client.mjs",
+    "start:sse-server": "node 02-http-sse-mcp-server/server.mjs",
+    "test:sse": "node 02-http-sse-mcp-server/client.mjs",
+    "test:gateway": "node 03-mcp-gateway/demo.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.6.0",
+    "express": "^4.19.2",
+    "zod": "^3.23.8"
+  }
+}
