@@ -1,0 +1,32 @@
+{
+  "name": "mcp-master-projects",
+  "version": "1.0.0",
+  "description": "Complete MCP Master TypeScript Implementations and Projects",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev:01-calculator": "tsx src/01-calculator-mcp/client.ts",
+    "dev:02-weather": "tsx src/02-weather-mcp/client.ts",
+    "dev:03-database": "tsx src/03-database-mcp/client.ts",
+    "dev:04-github": "tsx src/04-github-mcp/client.ts",
+    "dev:05-task-manager": "tsx src/05-task-manager-mcp/client.ts",
+    "dev:06-agent-loop": "tsx src/06-llm-agent-loop/agent.ts",
+    "dev:07-http-server": "tsx src/07-streamable-http-mcp/server.ts",
+    "dev:07-http-client": "tsx src/07-streamable-http-mcp/client.ts",
+    "dev:08-gateway": "tsx src/08-mcp-gateway/demo.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.6.0",
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.12.7",
+    "tsx": "^4.7.2",
+    "typescript": "^5.4.5"
+  }
+}
