@@ -153,3 +153,125 @@
 
 🔗 **Read More:**
 [Day 08 Main Index](./week04/learning/day08/notes/completed%20notes.md) | [GitHub Link](https://github.com/Amie-dev/Gen-AI-Cohort-2026/blob/main/week04/learning/day08/notes/completed%20notes.md)
+
+---
+
+🗓️ **Week 05 — Enterprise Full-Stack AI Notebook & RAG Platform**
+> Build an enterprise-grade full-stack AI Notebook and RAG application (Chaibook / NotebookLM) with Express, Next.js 16, PostgreSQL, Prisma, Better Auth, Pinecone Vector DB, Inngest background jobs, Mem0 memory, streaming SSE chat, and async learning artifacts.
+
+---
+
+📅 **Day 09 — Enterprise Full-Stack System Architecture, Database & Multi-Channel Source Ingestion**
+* Full-Stack AI Application Architecture (Client/Server Separation & REST/SSE API design)
+* Express TypeScript ESM Setup & Next.js 16 App Router Integration
+* PostgreSQL Database Foundation & Prisma ORM Schema Design
+* Better Auth Authentication (Session Management & Google OAuth Integration)
+* Multi-Layer Workspaces CRUD & Access Control
+* Knowledge Source Ingestion (Text, Markdown, Firecrawl Web Scraper, YouTube Transcript Extractor, Cloudinary PDF Uploads)
+
+🔗 **Read More:**
+[Day 09 Implementation Guide](./week05/implementations%20guide/README.md) | [GitHub Link](https://github.com/Amie-dev/Gen-AI-Cohort-2026/blob/main/week05/implementations%20guide/README.md)
+
+---
+
+📅 **Day 10 — Asynchronous Vector Indexing Pipelines, RAG Chat Engine & Learning Artifacts**
+* Asynchronous Background Processing with Inngest Engine
+* Sliding Window Text Chunking & OpenAI Vector Embeddings
+* Vector Store Indexing & Pinecone Vector Upserts
+* Real-Time Streaming RAG Chat Engine (Server-Sent Events & Interactive Citations)
+* Agentic Memory Integration (`mem0`) & Tavily Live Web Search
+* Structured Learning Artifact Generation (Flashcards, Quizzes, Summaries & Audio Overviews)
+
+🔗 **Read More:**
+[Day 10 Main Index](./week05/notes.md) | [GitHub Link](https://github.com/Amie-dev/Gen-AI-Cohort-2026/blob/main/week05/notes.md)
+
+---
+
+🗓️ **Week 06 — Graph Databases, Cypher & Knowledge Graph Memory Systems**
+> Master graph database architecture, Cypher Query Language, Neo4j engine deployment, official Node.js driver integration, and GraphRAG for connected AI agent memory systems.
+
+---
+
+📅 **Day 11 — Graph Database Fundamentals & Cognitive Memory Architectures**
+* Fundamentals of Graph Data Structures (Nodes, Edges, Properties, Labels)
+* Human Cognitive Memory Mental Model (Key-Value vs. Connected/Relational Factual & Episodic Memory)
+* In-Memory vs. Persistent Graph Storage Engines
+* Paradigm Comparison: SQL (Junction Tables) vs. NoSQL (Embedded References) vs. Native Graph DB (Index-Free Adjacency)
+* Graph Schema Design & Property Graph Modeling Rules
+
+🔗 **Read More:**
+[Day 11 Master Notes](./week06/learning/day12/notes/01-graph-database-fundamentals-and-memory-architecture.md) | [GitHub Link](https://github.com/Amie-dev/Gen-AI-Cohort-2026/blob/main/week06/learning/day12/notes/01-graph-database-fundamentals-and-memory-architecture.md)
+
+---
+
+📅 **Day 12 — Cypher Query Language, Neo4j Integration & GraphRAG**
+* Cypher Query Language ASCII-Art Syntax (`()`, `[]`, `-->`)
+* Cypher CRUD Operations (`MATCH`, `CREATE`, `MERGE`, `SET`, `DELETE`, `DETACH DELETE`)
+* Traversal Algorithms & Variable-Length Path Discovery (BFS vs DFS)
+* Neo4j Engine Architecture, Bolt Protocol (Port 7687) & Cloud (Aura) vs Docker Deployments
+* Building Node.js Applications with Official `neo4j-driver` (`driver.executeQuery()`, Transactions)
+* GraphRAG: Hybrid Vector Search + Knowledge Graph Traversals & LLM Text-to-Cypher Integration
+
+🔗 **Read More:**
+[Day 12 Main Index](./week06/learning/day12/notes/completed%20notes.md) | [GitHub Link](https://github.com/Amie-dev/Gen-AI-Cohort-2026/blob/main/week06/learning/day12/notes/completed%20notes.md)
+
+---
+
+🗓️ **Week 07 — Event-Driven Multi-Agent Workflows & Autonomous GitHub Agents**
+> Master durable execution architectures, event-driven background job orchestration with Inngest, state checkpointing, concurrency rate-limiting, and building an autonomous AI GitHub PR reviewer bot using Octokit and OpenAI Agents SDK.
+
+---
+
+📅 **Day 13 — Inngest Workflows in AI & Durable Execution Architecture**
+* Asynchronous vs. Synchronous AI Multi-Agent Architectures
+* Fundamentals of Durable Execution & State Checkpointing Mechanics
+* Solving Gateway Timeouts, Duplicate Tokens & Process Crash Failures
+* Traditional Queues (RabbitMQ, Redis, BullMQ) vs. Inngest Serverless Architecture
+* Inngest SDK Steps API (`step.run()`, `step.sleep()`, `step.waitForEvent()`, `step.invoke()`, `step.sendEvent()`)
+* Parallel Fan-Out / Fan-In Execution (`Promise.all`), Concurrency Control & Rate Limiting
+
+🔗 **Read More:**
+[Day 13 Main Index](./week07/learning/day13/notes/completed%20notes.md) | [GitHub Link](https://github.com/Amie-dev/Gen-AI-Cohort-2026/blob/main/week07/learning/day13/notes/completed%20notes.md)
+
+---
+
+📅 **Day 14 — Hands-On AI GitHub PR Reviewer Bot with Inngest & Octokit**
+* Autonomous GitHub PR Review Bot Architecture & Inngest Event Pipeline
+* Octokit GitHub REST API Integration & PAT Authentication
+* Extracting & Parsing Paginated Pull Request Diffs (`octokit.paginate`)
+* Diff Token Window Optimizations (Filtering `package-lock.json`, Minified Files & Assets)
+* Structured LLM Review Output Enforcement with OpenAI Agents SDK & Zod Schemas
+* Webhook Listener Routes (`/webhook/github`) & End-to-End Durable Execution Testing
+
+🔗 **Read More:**
+[Day 14 Main Index](./week07/learning/day14/notes/completed%20notes.md) | [GitHub Link](https://github.com/Amie-dev/Gen-AI-Cohort-2026/blob/main/week07/learning/day14/notes/completed%20notes.md)
+
+---
+
+🗓️ **Week 08 — Model Context Protocol (MCP) & Claude Skills Ecosystem**
+> Master open model-context standards, Model Context Protocol (MCP) architecture and transports, context poisoning mitigation, MCP Gateways, progressive disclosure, and production Claude Skills development.
+
+---
+
+📅 **Day 15 — Model Context Protocol (MCP) Architecture & Transports**
+* The Model Context Protocol (MCP) Standard & Solving Tool Fragmentation
+* Core MCP Triad: Host Applications, MCP Clients, and MCP Servers/Providers
+* Primitive Capabilities: Tools (Function Calling), Resources (Data Context), and Prompts (Templates)
+* JSON-RPC 2.0 Protocol & Transports (STDIO Local Process Pipes vs HTTP Streaming / SSE)
+* Tool Context Poisoning, Gateway Architecture & Dynamic Tool Filtering/Routing
+
+🔗 **Read More:**
+[Day 15 Main Index](./week08/learning/day15/notes/README.md) | [GitHub Link](https://github.com/Amie-dev/Gen-AI-Cohort-2026/blob/main/week08/learning/day15/notes/README.md)
+
+---
+
+📅 **Day 16 — Claude Skills Development & MCP Integration**
+* Claude Skills Architecture vs MCP (Connectivity vs Workflow Knowledge)
+* Progressive Disclosure Architecture (Level 1 Frontmatter -> Level 2 Body -> Level 3 Resources)
+* `SKILL.md` Specifications: YAML Frontmatter, Description Formulas & Security Rules
+* Deterministic Code Execution (Python/Bash Scripts inside `scripts/`) over Probabilistic Instructions
+* Testing & Evaluation spectrum (Manual, CLI, API, `skill-creator` tool)
+* Agent Skills Open Standard, Programmatic API (`/v1/skills`) & Production Distribution
+
+🔗 **Read More:**
+[Day 16 Main Index](./week08/learning/day16/notes/README.md) | [GitHub Link](https://github.com/Amie-dev/Gen-AI-Cohort-2026/blob/main/week08/learning/day16/notes/README.md)
